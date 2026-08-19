@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from send2trash import send2trash
 
 import db
+from analysis import ANALYSIS_OFFSET_SEC
 
 DB_PATH = "crate_flip.db"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -15,15 +16,24 @@ AUDIO_CACHE_DIR = Path(__file__).parent / ".cache" / "audio"
 
 # Extensions whose containers commonly carry large embedded album art
 # (ID3 APIC / iTunes atoms), which can delay browser metadata probing by
-# several seconds. wav/flac don't have this problem, so leave them as-is.
+# several seconds.
 ART_STRIP_EXTENSIONS = {".mp3", ".m4a", ".aiff", ".aif"}
+
+# Most EDM tracks open with a bare intro (just drums), so previews start
+# partway in instead — same offset used for feature-extraction windowing.
+PREVIEW_START_OFFSET_SEC = ANALYSIS_OFFSET_SEC
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
-def _playable_audio_path(track_id, source_path):
-    if source_path.suffix.lower() not in ART_STRIP_EXTENSIONS:
+def _playable_audio_path(track_id, source_path, duration_sec=None):
+    offset = PREVIEW_START_OFFSET_SEC
+    if duration_sec is not None and duration_sec <= offset + 5:
+        offset = 0  # too short to skip an intro without cutting the track off
+
+    needs_processing = offset > 0 or source_path.suffix.lower() in ART_STRIP_EXTENSIONS
+    if not needs_processing:
         return source_path
 
     AUDIO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -31,17 +41,13 @@ def _playable_audio_path(track_id, source_path):
     if cached_path.exists():
         return cached_path
 
+    cmd = ["ffmpeg", "-v", "error", "-y"]
+    if offset:
+        cmd += ["-ss", str(offset)]
+    cmd += ["-i", str(source_path), "-map", "0:a", "-c", "copy", str(cached_path)]
+
     try:
-        subprocess.run(
-            [
-                "ffmpeg", "-v", "error", "-y",
-                "-i", str(source_path),
-                "-map", "0:a", "-c", "copy",
-                str(cached_path),
-            ],
-            check=True,
-            capture_output=True,
-        )
+        subprocess.run(cmd, check=True, capture_output=True)
         return cached_path
     except (subprocess.CalledProcessError, FileNotFoundError):
         # ffmpeg missing or this file couldn't be remuxed cleanly — fall
@@ -51,7 +57,7 @@ def _playable_audio_path(track_id, source_path):
 
 class ConfirmRequest(BaseModel):
     genre: str = Field(min_length=1)
-    energy: int = Field(ge=1, le=10)
+    energy: int = Field(ge=1, le=5)
 
 
 def _track_to_dict(row):
@@ -103,7 +109,7 @@ def track_audio(track_id: int):
     path = Path(row["path"])
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Audio file missing on disk")
-    return FileResponse(_playable_audio_path(track_id, path))
+    return FileResponse(_playable_audio_path(track_id, path, row["file_duration_sec"]))
 
 
 @app.post("/tracks/{track_id}/confirm")

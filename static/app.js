@@ -4,10 +4,25 @@ const card = document.getElementById("card");
 const emptyState = document.getElementById("empty-state");
 const filenameEl = document.getElementById("filename");
 const player = document.getElementById("player");
+const playBtn = document.getElementById("play-btn");
+const playIcon = document.getElementById("play-icon");
+const pauseIcon = document.getElementById("pause-icon");
+const playerBar = document.getElementById("player-bar");
+const playerProgress = document.getElementById("player-progress");
+const timeCurrent = document.getElementById("time-current");
+const timeDuration = document.getElementById("time-duration");
 const genreInput = document.getElementById("genre-input");
 const energyInput = document.getElementById("energy-input");
 const energyValue = document.getElementById("energy-value");
 const statsEl = document.getElementById("stats");
+
+function formatTime(seconds) {
+  if (!isFinite(seconds)) return "0:00";
+  const total = Math.floor(seconds);
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+}
 
 async function loadNext(afterId) {
   const url = afterId ? `/tracks/next?after_id=${afterId}` : "/tracks/next";
@@ -33,15 +48,51 @@ function render(track) {
 
   filenameEl.textContent = track.filename;
   genreInput.value = track.predicted_genre || "";
-  const energy = track.predicted_energy || 5;
+  const energy = track.predicted_energy || 3;
   energyInput.value = energy;
   energyValue.textContent = energy;
 
+  player.pause();
   player.src = `/tracks/${track.id}/audio`;
+  playerProgress.style.width = "0%";
+  timeCurrent.textContent = "0:00";
+  timeDuration.textContent = "0:00";
+  setPlayingIcon(false);
+}
+
+function setPlayingIcon(isPlaying) {
+  playIcon.classList.toggle("icon-hidden", isPlaying);
+  pauseIcon.classList.toggle("icon-hidden", !isPlaying);
 }
 
 energyInput.addEventListener("input", () => {
   energyValue.textContent = energyInput.value;
+});
+
+playBtn.addEventListener("click", () => {
+  if (player.paused) player.play();
+  else player.pause();
+});
+
+player.addEventListener("play", () => setPlayingIcon(true));
+player.addEventListener("pause", () => setPlayingIcon(false));
+
+player.addEventListener("loadedmetadata", () => {
+  timeDuration.textContent = formatTime(player.duration);
+});
+
+player.addEventListener("timeupdate", () => {
+  timeCurrent.textContent = formatTime(player.currentTime);
+  if (player.duration) {
+    playerProgress.style.width = `${(player.currentTime / player.duration) * 100}%`;
+  }
+});
+
+playerBar.addEventListener("click", (event) => {
+  if (!player.duration) return;
+  const rect = playerBar.getBoundingClientRect();
+  const ratio = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1);
+  player.currentTime = ratio * player.duration;
 });
 
 async function refreshStats() {

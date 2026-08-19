@@ -125,7 +125,9 @@ def predict_genre(features):
 
 
 def predict_energy(features):
-    # Crude 1-10 scale from loudness + percussive density + tempo, each
+    # Crude 1-5 scale (matches Rekordbox/Serato/Traktor star ratings, so
+    # the confirmed value round-trips into those tools without a lossy
+    # conversion) from loudness + percussive density + tempo, each
     # normalized against rough real-world ranges. Gets replaced by a
     # library-relative percentile score once there's a folder of tracks
     # to compare against (Phase 2+).
@@ -134,7 +136,7 @@ def predict_energy(features):
     tempo_score = np.clip((features["tempo"] - 100) / 90, 0, 1)
 
     raw = 0.5 * rms_score + 0.35 * onset_score + 0.15 * tempo_score
-    return int(round(1 + raw * 9))
+    return int(round(1 + raw * 4))
 
 
 def analyze(path):

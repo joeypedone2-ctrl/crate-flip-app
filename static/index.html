@@ -15,7 +15,22 @@
     <div id="card" class="card">
       <div id="filename" class="filename"></div>
 
-      <audio id="player" controls></audio>
+      <div class="player">
+        <audio id="player" preload="metadata"></audio>
+        <button id="play-btn" class="play-btn" aria-label="Play/Pause">
+          <svg id="play-icon" class="icon-visible" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          <svg id="pause-icon" class="icon-hidden" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+        </button>
+        <div class="player-track">
+          <div class="player-bar" id="player-bar">
+            <div class="player-progress" id="player-progress"></div>
+          </div>
+          <div class="player-time">
+            <span id="time-current">0:00</span>
+            <span id="time-duration">0:00</span>
+          </div>
+        </div>
+      </div>
 
       <div class="field">
         <label for="genre-input">Genre</label>
@@ -38,8 +53,8 @@
       </div>
 
       <div class="field">
-        <label for="energy-input">Energy: <span id="energy-value">-</span>/10</label>
-        <input id="energy-input" type="range" min="1" max="10" step="1" />
+        <label for="energy-input">Energy: <span id="energy-value">-</span>/5</label>
+        <input id="energy-input" type="range" min="1" max="5" step="1" />
       </div>
     </div>
 
@@ -48,12 +63,26 @@
     </div>
 
     <div id="actions" class="actions">
-      <button id="delete-btn" class="btn btn-delete" title="Delete (←)">🗑 Delete</button>
-      <button id="skip-btn" class="btn btn-skip" title="Skip (↓)">Skip</button>
-      <button id="confirm-btn" class="btn btn-confirm" title="Confirm (→)">✓ Confirm</button>
+      <button id="delete-btn" class="icon-btn icon-btn-delete" title="Delete (←)" aria-label="Delete">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/>
+          <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/>
+          <path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/>
+        </svg>
+      </button>
+      <button id="skip-btn" class="icon-btn icon-btn-skip" title="Skip (↓)" aria-label="Skip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>
+        </svg>
+      </button>
+      <button id="confirm-btn" class="icon-btn icon-btn-confirm" title="Confirm (→)" aria-label="Confirm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 13l4 4L19 7"/>
+        </svg>
+      </button>
     </div>
 
-    <p class="hint">Keyboard: ← delete · → confirm · ↓ skip · space play/pause</p>
+    <p class="hint">← delete · → confirm · ↓ skip · space play/pause</p>
   </main>
 
   <script src="/static/app.js"></script>
