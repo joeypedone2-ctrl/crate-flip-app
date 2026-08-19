@@ -14,9 +14,12 @@ const timeCurrent = document.getElementById("time-current");
 const timeDuration = document.getElementById("time-duration");
 const genreInput = document.getElementById("genre-input");
 const energyStars = document.querySelectorAll("#energy-stars .star");
+const revertBtn = document.getElementById("revert-btn");
 const statsEl = document.getElementById("stats");
 
 let currentEnergy = 3;
+let predictedGenre = "";
+let predictedEnergy = 3;
 
 function formatTime(seconds) {
   if (!isFinite(seconds)) return "0:00";
@@ -61,9 +64,12 @@ function render(track) {
   emptyState.hidden = true;
 
   filenameEl.textContent = track.filename;
-  genreInput.value = track.predicted_genre || "";
-  currentEnergy = track.predicted_energy || 3;
+  predictedGenre = track.predicted_genre || "";
+  predictedEnergy = track.predicted_energy || 3;
+  genreInput.value = predictedGenre;
+  currentEnergy = predictedEnergy;
   paintStars(currentEnergy);
+  revertBtn.hidden = true;
 
   player.pause();
   player.src = `/tracks/${track.id}/audio`;
@@ -84,10 +90,26 @@ function paintStars(value) {
   });
 }
 
+function checkDirty() {
+  const isDirty = genreInput.value.trim() !== predictedGenre || currentEnergy !== predictedEnergy;
+  revertBtn.hidden = !isDirty;
+}
+
+function revertToPrediction() {
+  genreInput.value = predictedGenre;
+  currentEnergy = predictedEnergy;
+  paintStars(currentEnergy);
+  revertBtn.hidden = true;
+}
+
+revertBtn.addEventListener("click", revertToPrediction);
+genreInput.addEventListener("input", checkDirty);
+
 energyStars.forEach((star) => {
   star.addEventListener("click", () => {
     currentEnergy = parseInt(star.dataset.value, 10);
     paintStars(currentEnergy);
+    checkDirty();
   });
   star.addEventListener("mouseenter", () => {
     paintStars(parseInt(star.dataset.value, 10));

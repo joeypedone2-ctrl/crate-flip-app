@@ -93,6 +93,7 @@ main {
 }
 
 .card {
+  position: relative;
   width: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -103,6 +104,45 @@ main {
   gap: 2rem;
   box-shadow: 0 20px 48px var(--shadow);
   animation: card-in 0.22s ease;
+}
+
+.card[hidden] {
+  display: none;
+}
+
+.revert-btn {
+  position: absolute;
+  bottom: 0.9rem;
+  right: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 999px;
+  padding: 0.4rem 0.75rem 0.4rem 0.6rem;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.revert-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.revert-btn[hidden] {
+  display: none;
+}
+
+.revert-btn:hover {
+  opacity: 1;
+  color: var(--text);
+  border-color: var(--text-dim);
 }
 
 @keyframes card-in {
@@ -289,6 +329,10 @@ main {
   align-items: center;
   justify-content: center;
   gap: 2rem;
+}
+
+.actions[hidden] {
+  display: none;
 }
 
 .icon-btn {
