@@ -6,21 +6,78 @@ corrections once enough of those exist.
 """
 
 import argparse
+import os
+import subprocess
+import tempfile
 import time
 
 import librosa
 import numpy as np
+import soundfile as sf
 
 
 ANALYSIS_WINDOW_SEC = 40
+ANALYSIS_OFFSET_SEC = 20  # skip a typical intro
+
+
+def _probe_duration(path):
+    # Best-effort, header-based only — never fall back to a full decode
+    # just to report a duration; that defeats the point of windowing below
+    # and can hang on files with broken/missing length metadata.
+    try:
+        return float(sf.info(path).duration)
+    except Exception:
+        return None
+
+
+def _load_via_ffmpeg(path, offset, duration):
+    # Some files lie about their own format (e.g. SoundCloud downloads
+    # saved as .mp3 that are actually AAC/mp4 audio) and soundfile
+    # correctly refuses to parse them. ffmpeg is far more tolerant of
+    # content/extension mismatches, so re-encode the target window to a
+    # clean temp wav and load that instead.
+    fd, tmp_path = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-v", "error", "-y",
+                "-ss", str(offset), "-t", str(duration),
+                "-i", path,
+                "-ac", "1", "-ar", "22050",
+                tmp_path,
+            ],
+            check=True,
+            capture_output=True,
+        )
+        return librosa.load(tmp_path, sr=22050, mono=True)
+    finally:
+        os.remove(tmp_path)
+
+
+def _load_window(path, offset, duration):
+    try:
+        y, sr = librosa.load(path, sr=22050, mono=True, offset=offset, duration=duration)
+        if len(y) > 0:
+            return y, sr
+    except Exception:
+        pass
+    return _load_via_ffmpeg(path, offset, duration)
 
 
 def extract_features(path):
-    duration = librosa.get_duration(path=path)
-    offset = max((duration - ANALYSIS_WINDOW_SEC) / 2, 0)
-    y, sr = librosa.load(
-        path, sr=22050, mono=True, offset=offset, duration=ANALYSIS_WINDOW_SEC
-    )
+    # Load a fixed-size window at a fixed offset rather than probing the
+    # file's total duration first — probing can force a full decode on
+    # files with bad VBR/length headers, which showed up in practice as a
+    # single mp3 hanging a worker for 30+ minutes. Loading with an explicit
+    # offset/duration bounds the decode cost regardless of the source
+    # file's real length or how broken its metadata is.
+    y, sr = _load_window(path, ANALYSIS_OFFSET_SEC, ANALYSIS_WINDOW_SEC)
+    if len(y) == 0:
+        # Shorter than the offset — fall back to analyzing from the start.
+        y, sr = _load_window(path, 0, ANALYSIS_WINDOW_SEC)
+    if len(y) == 0:
+        raise ValueError("no audio data could be decoded from this file")
 
     tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
     tempo = float(np.atleast_1d(tempo)[0])
@@ -40,7 +97,7 @@ def extract_features(path):
         "rms": rms,
         "onset_strength": onset_strength,
         "spectral_centroid": spectral_centroid,
-        "file_duration_sec": duration,
+        "file_duration_sec": _probe_duration(path),
         "analyzed_duration_sec": len(y) / sr,
     }
 
