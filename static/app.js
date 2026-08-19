@@ -88,12 +88,34 @@ player.addEventListener("timeupdate", () => {
   }
 });
 
-playerBar.addEventListener("click", (event) => {
+function seekToClientX(clientX) {
   if (!player.duration) return;
   const rect = playerBar.getBoundingClientRect();
-  const ratio = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1);
+  const ratio = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1);
   player.currentTime = ratio * player.duration;
+}
+
+let isDraggingBar = false;
+
+playerBar.addEventListener("mousedown", (event) => {
+  isDraggingBar = true;
+  seekToClientX(event.clientX);
 });
+
+window.addEventListener("mousemove", (event) => {
+  if (isDraggingBar) seekToClientX(event.clientX);
+});
+
+window.addEventListener("mouseup", () => {
+  isDraggingBar = false;
+});
+
+const SEEK_STEP_SEC = 10;
+
+function seekBy(deltaSeconds) {
+  if (!player.duration) return;
+  player.currentTime = Math.min(Math.max(player.currentTime + deltaSeconds, 0), player.duration);
+}
 
 async function refreshStats() {
   const res = await fetch("/tracks/stats");
@@ -134,24 +156,31 @@ document.getElementById("skip-btn").addEventListener("click", skipTrack);
 
 document.addEventListener("keydown", (event) => {
   const isTypingTarget = event.target === genreInput || event.target === energyInput;
-
-  if (event.key === " " && !isTypingTarget) {
-    event.preventDefault();
-    player.paused ? player.play() : player.pause();
-    return;
-  }
-
   if (isTypingTarget) return;
 
-  if (event.key === "ArrowRight") {
+  const key = event.key.toLowerCase();
+
+  if (key === " ") {
+    event.preventDefault();
+    player.paused ? player.play() : player.pause();
+  } else if (key === "arrowup") {
     event.preventDefault();
     confirmTrack();
-  } else if (event.key === "ArrowLeft") {
-    event.preventDefault();
-    deleteTrack();
-  } else if (event.key === "ArrowDown") {
+  } else if (key === "arrowdown") {
     event.preventDefault();
     skipTrack();
+  } else if (key === "arrowleft") {
+    event.preventDefault();
+    seekBy(-SEEK_STEP_SEC);
+  } else if (key === "arrowright") {
+    event.preventDefault();
+    seekBy(SEEK_STEP_SEC);
+  } else if (key === "x") {
+    event.preventDefault();
+    deleteTrack();
+  } else if (key === "c") {
+    event.preventDefault();
+    confirmTrack();
   }
 });
 
