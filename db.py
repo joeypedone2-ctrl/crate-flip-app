@@ -106,9 +106,10 @@ def get_track(conn, track_id):
     return conn.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone()
 
 
-def get_next_pending(conn):
+def get_next_pending(conn, after_id=0):
     return conn.execute(
-        "SELECT * FROM tracks WHERE status = 'pending' AND error IS NULL ORDER BY id LIMIT 1"
+        "SELECT * FROM tracks WHERE status = 'pending' AND error IS NULL AND id > ? ORDER BY id LIMIT 1",
+        (after_id,),
     ).fetchone()
 
 

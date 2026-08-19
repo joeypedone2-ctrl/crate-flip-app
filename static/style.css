@@ -1,0 +1,171 @@
+:root {
+  --bg: #121316;
+  --surface: #1c1e23;
+  --surface-2: #26292f;
+  --text: #f0f1f3;
+  --text-dim: #9a9ea6;
+  --accent: #7c9cff;
+  --confirm: #3ecf8e;
+  --delete: #ef5b5b;
+  --border: #33363c;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-2: #eceef1;
+    --text: #1a1b1e;
+    --text-dim: #63666d;
+    --accent: #3b5bdb;
+    --confirm: #1f9d63;
+    --delete: #d13c3c;
+    --border: #dde0e4;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+header {
+  width: 100%;
+  max-width: 480px;
+  padding: 1.5rem 1rem 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+header h1 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+#stats {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+main {
+  width: 100%;
+  max-width: 480px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.card {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.filename {
+  font-size: 1rem;
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
+
+audio {
+  width: 100%;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.field label {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.field input[type="text"],
+.field input:not([type]),
+#genre-input {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  font-size: 1rem;
+}
+
+#energy-input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.empty-state {
+  width: 100%;
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-dim);
+}
+
+.actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.btn {
+  border: none;
+  border-radius: 10px;
+  padding: 0.85rem 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+  transition: filter 0.15s ease;
+}
+
+.btn:hover {
+  filter: brightness(1.1);
+}
+
+.btn:active {
+  filter: brightness(0.9);
+}
+
+.btn-delete {
+  background: var(--delete);
+}
+
+.btn-skip {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-confirm {
+  background: var(--confirm);
+}
+
+.hint {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  text-align: center;
+}

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Crate Flip</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Crate Flip</h1>
+    <div id="stats">loading…</div>
+  </header>
+
+  <main id="review-area">
+    <div id="card" class="card">
+      <div id="filename" class="filename"></div>
+
+      <audio id="player" controls></audio>
+
+      <div class="field">
+        <label for="genre-input">Genre</label>
+        <input id="genre-input" list="genre-options" autocomplete="off" />
+        <datalist id="genre-options">
+          <option value="house"></option>
+          <option value="tech house"></option>
+          <option value="deep house"></option>
+          <option value="techno"></option>
+          <option value="melodic techno"></option>
+          <option value="hard techno"></option>
+          <option value="trance"></option>
+          <option value="progressive trance"></option>
+          <option value="dubstep"></option>
+          <option value="drum and bass"></option>
+          <option value="garage"></option>
+          <option value="breaks"></option>
+          <option value="minimal"></option>
+        </datalist>
+      </div>
+
+      <div class="field">
+        <label for="energy-input">Energy: <span id="energy-value">-</span>/10</label>
+        <input id="energy-input" type="range" min="1" max="10" step="1" />
+      </div>
+    </div>
+
+    <div id="empty-state" class="empty-state" hidden>
+      <p>No pending tracks left to review.</p>
+    </div>
+
+    <div id="actions" class="actions">
+      <button id="delete-btn" class="btn btn-delete" title="Delete (←)">🗑 Delete</button>
+      <button id="skip-btn" class="btn btn-skip" title="Skip (↓)">Skip</button>
+      <button id="confirm-btn" class="btn btn-confirm" title="Confirm (→)">✓ Confirm</button>
+    </div>
+
+    <p class="hint">Keyboard: ← delete · → confirm · ↓ skip · space play/pause</p>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

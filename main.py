@@ -1,15 +1,52 @@
+import subprocess
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from send2trash import send2trash
 
 import db
 
 DB_PATH = "crate_flip.db"
+STATIC_DIR = Path(__file__).parent / "static"
+AUDIO_CACHE_DIR = Path(__file__).parent / ".cache" / "audio"
+
+# Extensions whose containers commonly carry large embedded album art
+# (ID3 APIC / iTunes atoms), which can delay browser metadata probing by
+# several seconds. wav/flac don't have this problem, so leave them as-is.
+ART_STRIP_EXTENSIONS = {".mp3", ".m4a", ".aiff", ".aif"}
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+def _playable_audio_path(track_id, source_path):
+    if source_path.suffix.lower() not in ART_STRIP_EXTENSIONS:
+        return source_path
+
+    AUDIO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cached_path = AUDIO_CACHE_DIR / f"{track_id}{source_path.suffix}"
+    if cached_path.exists():
+        return cached_path
+
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-v", "error", "-y",
+                "-i", str(source_path),
+                "-map", "0:a", "-c", "copy",
+                str(cached_path),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        return cached_path
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # ffmpeg missing or this file couldn't be remuxed cleanly — fall
+        # back to serving the original rather than failing playback.
+        return source_path
 
 
 class ConfirmRequest(BaseModel):
@@ -23,8 +60,13 @@ def _track_to_dict(row):
     return data
 
 
-@app.get("/")
-def read_root():
+@app.get("/", response_class=HTMLResponse)
+def index():
+    return (STATIC_DIR / "index.html").read_text()
+
+
+@app.get("/api/health")
+def health():
     return {"message": "Crate Flip is alive"}
 
 
@@ -35,9 +77,9 @@ def track_stats():
 
 
 @app.get("/tracks/next")
-def next_track():
+def next_track(after_id: int = 0):
     with db.connect(DB_PATH) as conn:
-        row = db.get_next_pending(conn)
+        row = db.get_next_pending(conn, after_id=after_id)
     if row is None:
         raise HTTPException(status_code=404, detail="No pending tracks")
     return _track_to_dict(row)
@@ -61,7 +103,7 @@ def track_audio(track_id: int):
     path = Path(row["path"])
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Audio file missing on disk")
-    return FileResponse(path)
+    return FileResponse(_playable_audio_path(track_id, path))
 
 
 @app.post("/tracks/{track_id}/confirm")
