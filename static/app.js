@@ -13,9 +13,10 @@ const playerProgress = document.getElementById("player-progress");
 const timeCurrent = document.getElementById("time-current");
 const timeDuration = document.getElementById("time-duration");
 const genreInput = document.getElementById("genre-input");
-const energyInput = document.getElementById("energy-input");
-const energyValue = document.getElementById("energy-value");
+const energyStars = document.querySelectorAll("#energy-stars .star");
 const statsEl = document.getElementById("stats");
+
+let currentEnergy = 3;
 
 function formatTime(seconds) {
   if (!isFinite(seconds)) return "0:00";
@@ -61,9 +62,8 @@ function render(track) {
 
   filenameEl.textContent = track.filename;
   genreInput.value = track.predicted_genre || "";
-  const energy = track.predicted_energy || 3;
-  energyInput.value = energy;
-  energyValue.textContent = energy;
+  currentEnergy = track.predicted_energy || 3;
+  paintStars(currentEnergy);
 
   player.pause();
   player.src = `/tracks/${track.id}/audio`;
@@ -78,8 +78,24 @@ function setPlayingIcon(isPlaying) {
   pauseIcon.classList.toggle("icon-hidden", !isPlaying);
 }
 
-energyInput.addEventListener("input", () => {
-  energyValue.textContent = energyInput.value;
+function paintStars(value) {
+  energyStars.forEach((star) => {
+    star.classList.toggle("active", parseInt(star.dataset.value, 10) <= value);
+  });
+}
+
+energyStars.forEach((star) => {
+  star.addEventListener("click", () => {
+    currentEnergy = parseInt(star.dataset.value, 10);
+    paintStars(currentEnergy);
+  });
+  star.addEventListener("mouseenter", () => {
+    paintStars(parseInt(star.dataset.value, 10));
+  });
+});
+
+document.getElementById("energy-stars").addEventListener("mouseleave", () => {
+  paintStars(currentEnergy);
 });
 
 playBtn.addEventListener("click", () => {
@@ -139,7 +155,7 @@ async function refreshStats() {
 async function confirmTrack() {
   if (!current) return;
   const genre = genreInput.value.trim();
-  const energy = parseInt(energyInput.value, 10);
+  const energy = currentEnergy;
   if (!genre) {
     genreInput.focus();
     return;
@@ -169,7 +185,7 @@ document.getElementById("skip-btn").addEventListener("click", skipTrack);
 document.getElementById("back-btn").addEventListener("click", backTrack);
 
 document.addEventListener("keydown", (event) => {
-  const isTypingTarget = event.target === genreInput || event.target === energyInput;
+  const isTypingTarget = event.target === genreInput;
   if (isTypingTarget) return;
 
   const key = event.key.toLowerCase();
