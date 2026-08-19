@@ -100,3 +100,44 @@ def save_error(conn, path, error_message, processed_at):
         "UPDATE tracks SET error = ?, processed_at = ? WHERE path = ?",
         (error_message, processed_at, path),
     )
+
+
+def get_track(conn, track_id):
+    return conn.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone()
+
+
+def get_next_pending(conn):
+    return conn.execute(
+        "SELECT * FROM tracks WHERE status = 'pending' AND error IS NULL ORDER BY id LIMIT 1"
+    ).fetchone()
+
+
+def confirm_track(conn, track_id, genre, energy):
+    conn.execute(
+        """
+        UPDATE tracks SET confirmed_genre = ?, confirmed_energy = ?, status = 'confirmed'
+        WHERE id = ?
+        """,
+        (genre, energy, track_id),
+    )
+    conn.commit()
+
+
+def mark_deleted(conn, track_id):
+    conn.execute("UPDATE tracks SET status = 'deleted' WHERE id = ?", (track_id,))
+    conn.commit()
+
+
+def get_stats(conn):
+    row = conn.execute(
+        """
+        SELECT
+            SUM(CASE WHEN status = 'pending' AND error IS NULL THEN 1 ELSE 0 END) AS pending,
+            SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed,
+            SUM(CASE WHEN status = 'deleted' THEN 1 ELSE 0 END) AS deleted,
+            SUM(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) AS errors,
+            COUNT(*) AS total
+        FROM tracks
+        """
+    ).fetchone()
+    return dict(row)
