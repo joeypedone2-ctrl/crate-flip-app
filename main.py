@@ -1,4 +1,5 @@
 import subprocess
+import threading
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -8,6 +9,7 @@ from pydantic import BaseModel, Field
 from send2trash import send2trash
 
 import db
+import scan as scan_module
 from analysis import ANALYSIS_OFFSET_SEC
 
 DB_PATH = "crate_flip.db"
@@ -55,6 +57,34 @@ def _playable_audio_path(track_id, source_path, duration_sec=None):
         return source_path
 
 
+SCAN_STATE = {
+    "running": False,
+    "folder": None,
+    "phase": None,
+    "discovered": 0,
+    "to_process": 0,
+    "processed": 0,
+    "errors": 0,
+    "error_message": None,
+}
+
+
+def _run_scan_in_background(folder):
+    def on_progress(fields):
+        SCAN_STATE.update(fields)
+
+    try:
+        scan_module.scan(folder, DB_PATH, on_progress=on_progress)
+    except Exception as exc:  # noqa: BLE001 - surface any failure via status polling rather than crashing the thread silently
+        SCAN_STATE["error_message"] = str(exc)
+    finally:
+        SCAN_STATE["running"] = False
+
+
+class ScanRequest(BaseModel):
+    folder: str = Field(min_length=1)
+
+
 class ConfirmRequest(BaseModel):
     genre: str = Field(min_length=1)
     energy: int = Field(ge=1, le=5)
@@ -74,6 +104,34 @@ def index():
 @app.get("/api/health")
 def health():
     return {"message": "Crate Flip is alive"}
+
+
+@app.post("/library/scan")
+def start_scan(body: ScanRequest):
+    if SCAN_STATE["running"]:
+        raise HTTPException(status_code=409, detail="A scan is already running")
+
+    folder_path = Path(body.folder).expanduser()
+    if not folder_path.is_dir():
+        raise HTTPException(status_code=400, detail=f"Not a folder: {body.folder}")
+
+    SCAN_STATE.update(
+        running=True,
+        folder=str(folder_path),
+        phase="starting",
+        discovered=0,
+        to_process=0,
+        processed=0,
+        errors=0,
+        error_message=None,
+    )
+    threading.Thread(target=_run_scan_in_background, args=(str(folder_path),), daemon=True).start()
+    return dict(SCAN_STATE)
+
+
+@app.get("/library/scan/status")
+def scan_status():
+    return dict(SCAN_STATE)
 
 
 @app.get("/tracks/stats")

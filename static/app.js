@@ -206,8 +206,94 @@ document.getElementById("delete-btn").addEventListener("click", deleteTrack);
 document.getElementById("skip-btn").addEventListener("click", skipTrack);
 document.getElementById("back-btn").addEventListener("click", backTrack);
 
+const folderToggleBtn = document.getElementById("folder-toggle-btn");
+const folderPanel = document.getElementById("folder-panel");
+const folderInput = document.getElementById("folder-input");
+const browseBtn = document.getElementById("browse-btn");
+const scanBtn = document.getElementById("scan-btn");
+const folderStatus = document.getElementById("folder-status");
+
+folderToggleBtn.addEventListener("click", () => {
+  folderPanel.hidden = !folderPanel.hidden;
+});
+
+// pywebview injects window.pywebview once its JS bridge is ready — only
+// then can we call the native folder-picker exposed from desktop.py. In a
+// plain browser tab this event never fires, so Browse stays hidden and
+// the text field is the only way in (browsers never expose real paths).
+window.addEventListener("pywebviewready", () => {
+  browseBtn.hidden = false;
+});
+
+browseBtn.addEventListener("click", async () => {
+  const folder = await window.pywebview.api.choose_folder();
+  if (folder) folderInput.value = folder;
+});
+
+function renderScanStatus(status) {
+  if (status.error_message) {
+    folderStatus.textContent = `Error: ${status.error_message}`;
+  } else if (status.phase === "discovering") {
+    folderStatus.textContent = "Scanning folder for audio files…";
+  } else if (status.phase === "processing") {
+    folderStatus.textContent = `Analyzing ${status.processed}/${status.to_process} new files (${status.errors} errors)…`;
+  } else if (status.phase === "done") {
+    folderStatus.textContent =
+      status.to_process === 0
+        ? "Up to date — no new files found."
+        : `Done: ${status.processed} files added (${status.errors} errors).`;
+  }
+}
+
+let scanPollTimer = null;
+
+function pollScanStatus() {
+  if (scanPollTimer) return;
+  scanPollTimer = setInterval(async () => {
+    const res = await fetch("/library/scan/status");
+    const status = await res.json();
+    renderScanStatus(status);
+    if (!status.running) {
+      clearInterval(scanPollTimer);
+      scanPollTimer = null;
+      refreshStats();
+      if (!current) loadNext();
+    }
+  }, 1000);
+}
+
+async function startScan() {
+  const folder = folderInput.value.trim();
+  if (!folder) return;
+  folderStatus.textContent = "Starting…";
+  const res = await fetch("/library/scan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folder }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    folderStatus.textContent = body.detail || "Failed to start scan.";
+    return;
+  }
+  pollScanStatus();
+}
+
+scanBtn.addEventListener("click", startScan);
+
+(async function resumeScanIfRunning() {
+  const res = await fetch("/library/scan/status");
+  const status = await res.json();
+  if (status.running) {
+    folderPanel.hidden = false;
+    if (status.folder) folderInput.value = status.folder;
+    renderScanStatus(status);
+    pollScanStatus();
+  }
+})();
+
 document.addEventListener("keydown", (event) => {
-  const isTypingTarget = event.target === genreInput;
+  const isTypingTarget = event.target === genreInput || event.target === folderInput;
   if (isTypingTarget) return;
 
   const key = event.key.toLowerCase();

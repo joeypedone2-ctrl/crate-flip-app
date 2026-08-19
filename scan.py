@@ -32,8 +32,13 @@ def _worker(path_str):
         return path_str, None, str(exc)
 
 
-def scan(folder, db_path, limit=None, workers=None):
+def scan(folder, db_path, limit=None, workers=None, on_progress=None):
+    def report(**fields):
+        if on_progress is not None:
+            on_progress(fields)
+
     workers = workers or os.cpu_count() or 4
+    report(phase="discovering")
     discovered = list(discover_audio_files(folder))
     print(f"Found {len(discovered)} audio files under {folder}")
 
@@ -52,7 +57,10 @@ def scan(folder, db_path, limit=None, workers=None):
         to_process = to_process[:limit]
         print(f"Limiting this run to {len(to_process)} files")
 
+    report(phase="processing", discovered=len(discovered), to_process=len(to_process), processed=0, errors=0)
+
     if not to_process:
+        report(phase="done", discovered=len(discovered), to_process=0, processed=0, errors=0)
         return
 
     start = time.perf_counter()
@@ -75,12 +83,26 @@ def scan(folder, db_path, limit=None, workers=None):
                 if processed % 10 == 0 or processed == len(to_process):
                     conn.commit()
                     print(f"  {processed}/{len(to_process)} processed ({errors} errors)")
+                    report(
+                        phase="processing",
+                        discovered=len(discovered),
+                        to_process=len(to_process),
+                        processed=processed,
+                        errors=errors,
+                    )
         conn.commit()
 
     elapsed = time.perf_counter() - start
     print(
         f"Done in {elapsed:.1f}s "
         f"({elapsed / max(processed, 1):.2f}s/file avg wall time, {workers} workers)"
+    )
+    report(
+        phase="done",
+        discovered=len(discovered),
+        to_process=len(to_process),
+        processed=processed,
+        errors=errors,
     )
 
 

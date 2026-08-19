@@ -19,11 +19,23 @@ def _run_server():
     uvicorn.Server(config).run()
 
 
+class Api:
+    """Exposed to the page as window.pywebview.api — lets the UI trigger a
+    native folder picker, which browsers can never do (they don't expose
+    real filesystem paths to JavaScript)."""
+
+    def choose_folder(self):
+        result = webview.windows[0].create_file_dialog(webview.FOLDER_DIALOG)
+        return result[0] if result else None
+
+
 def main():
     server_thread = threading.Thread(target=_run_server, daemon=True)
     server_thread.start()
 
-    webview.create_window("Crate Flip", f"http://{HOST}:{PORT}", width=560, height=820)
+    webview.create_window(
+        "Crate Flip", f"http://{HOST}:{PORT}", width=560, height=820, js_api=Api()
+    )
     webview.start()
 
 

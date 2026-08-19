@@ -8,8 +8,24 @@
 <body>
   <header>
     <h1>Crate Flip</h1>
-    <div id="stats">loading…</div>
+    <div class="header-right">
+      <div id="stats">loading…</div>
+      <button id="folder-toggle-btn" class="folder-toggle-btn" title="Add music folder" aria-label="Add music folder">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        </svg>
+      </button>
+    </div>
   </header>
+
+  <div id="folder-panel" class="folder-panel" hidden>
+    <div class="folder-row">
+      <input id="folder-input" type="text" placeholder="/path/to/your/music" autocomplete="off" />
+      <button id="browse-btn" class="folder-btn" hidden>Browse…</button>
+      <button id="scan-btn" class="folder-btn folder-btn-primary">Scan</button>
+    </div>
+    <div id="folder-status" class="folder-status"></div>
+  </div>
 
   <main id="review-area">
     <div id="card" class="card">
