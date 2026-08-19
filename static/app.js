@@ -1,4 +1,5 @@
 let current = null;
+const history = [];
 
 const card = document.getElementById("card");
 const emptyState = document.getElementById("empty-state");
@@ -25,6 +26,8 @@ function formatTime(seconds) {
 }
 
 async function loadNext(afterId) {
+  if (current) history.push(current.id);
+
   const url = afterId ? `/tracks/next?after_id=${afterId}` : "/tracks/next";
   const res = await fetch(url);
 
@@ -36,6 +39,16 @@ async function loadNext(afterId) {
     return;
   }
 
+  current = await res.json();
+  render(current);
+  refreshStats();
+}
+
+async function backTrack() {
+  if (history.length === 0) return;
+  const prevId = history.pop();
+  const res = await fetch(`/tracks/${prevId}`);
+  if (!res.ok) return;
   current = await res.json();
   render(current);
   refreshStats();
@@ -153,6 +166,7 @@ function skipTrack() {
 document.getElementById("confirm-btn").addEventListener("click", confirmTrack);
 document.getElementById("delete-btn").addEventListener("click", deleteTrack);
 document.getElementById("skip-btn").addEventListener("click", skipTrack);
+document.getElementById("back-btn").addEventListener("click", backTrack);
 
 document.addEventListener("keydown", (event) => {
   const isTypingTarget = event.target === genreInput || event.target === energyInput;
@@ -165,7 +179,7 @@ document.addEventListener("keydown", (event) => {
     player.paused ? player.play() : player.pause();
   } else if (key === "arrowup") {
     event.preventDefault();
-    confirmTrack();
+    backTrack();
   } else if (key === "arrowdown") {
     event.preventDefault();
     skipTrack();

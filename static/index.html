@@ -70,11 +70,18 @@
           <path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/>
         </svg>
       </button>
-      <button id="skip-btn" class="icon-btn icon-btn-skip" title="Skip (↓)" aria-label="Skip">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>
-        </svg>
-      </button>
+      <div class="nav-btns">
+        <button id="back-btn" class="icon-btn icon-btn-nav" title="Back (↑)" aria-label="Back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 19V5"/><path d="M6 11l6-6 6 6"/>
+          </svg>
+        </button>
+        <button id="skip-btn" class="icon-btn icon-btn-nav" title="Skip (↓)" aria-label="Skip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 5v14"/><path d="M18 13l-6 6-6-6"/>
+          </svg>
+        </button>
+      </div>
       <button id="confirm-btn" class="icon-btn icon-btn-confirm" title="Confirm (C)" aria-label="Confirm">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M5 13l4 4L19 7"/>
@@ -82,7 +89,7 @@
       </button>
     </div>
 
-    <p class="hint">↑ / C confirm · ↓ skip · X delete · ← / → seek 10s · space play/pause</p>
+    <p class="hint">↑ back · ↓ skip · C confirm · X delete · ← / → seek 10s · space play/pause</p>
   </main>
 
   <script src="/static/app.js"></script>

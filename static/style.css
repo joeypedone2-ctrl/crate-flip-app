@@ -287,18 +287,23 @@ main {
   border-color: var(--delete);
 }
 
-.icon-btn-skip {
+.nav-btns {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.icon-btn-nav {
   width: 64px;
   height: 64px;
   color: var(--text-dim);
 }
 
-.icon-btn-skip:hover {
+.icon-btn-nav:hover {
   color: var(--text);
   border-color: var(--text-dim);
 }
 
-.icon-btn-skip svg {
+.icon-btn-nav svg {
   width: 22px;
   height: 22px;
 }
