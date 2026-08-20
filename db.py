@@ -129,6 +129,21 @@ def mark_deleted(conn, track_id):
     conn.commit()
 
 
+def delete_tracks_under_folder(conn, folder):
+    # Prefix-match in Python rather than SQL LIKE: a track's path is always
+    # a file (never equal to the folder itself), and LIKE's wildcard chars
+    # (%, _) would misbehave on folder names that happen to contain them.
+    # The trailing separator prevents "/Music" from matching "/MusicOld/...".
+    folder_norm = str(folder).rstrip("/") + "/"
+    rows = conn.execute("SELECT id, path FROM tracks").fetchall()
+    matching_ids = [row["id"] for row in rows if row["path"].startswith(folder_norm)]
+    if matching_ids:
+        placeholders = ",".join("?" for _ in matching_ids)
+        conn.execute(f"DELETE FROM tracks WHERE id IN ({placeholders})", matching_ids)
+        conn.commit()
+    return matching_ids
+
+
 def get_stats(conn):
     row = conn.execute(
         """

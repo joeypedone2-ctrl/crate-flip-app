@@ -69,12 +69,15 @@ SCAN_STATE = {
 }
 
 
+SCAN_CANCEL_EVENT = threading.Event()
+
+
 def _run_scan_in_background(folder):
     def on_progress(fields):
         SCAN_STATE.update(fields)
 
     try:
-        scan_module.scan(folder, DB_PATH, on_progress=on_progress)
+        scan_module.scan(folder, DB_PATH, on_progress=on_progress, cancel_event=SCAN_CANCEL_EVENT)
     except Exception as exc:  # noqa: BLE001 - surface any failure via status polling rather than crashing the thread silently
         SCAN_STATE["error_message"] = str(exc)
     finally:
@@ -82,6 +85,10 @@ def _run_scan_in_background(folder):
 
 
 class ScanRequest(BaseModel):
+    folder: str = Field(min_length=1)
+
+
+class RemoveFolderRequest(BaseModel):
     folder: str = Field(min_length=1)
 
 
@@ -115,6 +122,7 @@ def start_scan(body: ScanRequest):
     if not folder_path.is_dir():
         raise HTTPException(status_code=400, detail=f"Not a folder: {body.folder}")
 
+    SCAN_CANCEL_EVENT.clear()
     SCAN_STATE.update(
         running=True,
         folder=str(folder_path),
@@ -132,6 +140,22 @@ def start_scan(body: ScanRequest):
 @app.get("/library/scan/status")
 def scan_status():
     return dict(SCAN_STATE)
+
+
+@app.post("/library/scan/cancel")
+def cancel_scan():
+    if not SCAN_STATE["running"]:
+        raise HTTPException(status_code=409, detail="No scan is running")
+    SCAN_CANCEL_EVENT.set()
+    return {"cancelling": True}
+
+
+@app.post("/library/remove-folder")
+def remove_folder(body: RemoveFolderRequest):
+    folder_path = Path(body.folder).expanduser()
+    with db.connect(DB_PATH) as conn:
+        removed_ids = db.delete_tracks_under_folder(conn, str(folder_path))
+    return {"removed": len(removed_ids)}
 
 
 @app.get("/tracks/stats")

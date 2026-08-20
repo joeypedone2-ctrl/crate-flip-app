@@ -211,6 +211,8 @@ const folderPanel = document.getElementById("folder-panel");
 const folderInput = document.getElementById("folder-input");
 const browseBtn = document.getElementById("browse-btn");
 const scanBtn = document.getElementById("scan-btn");
+const cancelScanBtn = document.getElementById("cancel-scan-btn");
+const removeFolderBtn = document.getElementById("remove-folder-btn");
 const folderStatus = document.getElementById("folder-status");
 
 folderToggleBtn.addEventListener("click", () => {
@@ -231,12 +233,18 @@ browseBtn.addEventListener("click", async () => {
 });
 
 function renderScanStatus(status) {
+  scanBtn.hidden = status.running;
+  cancelScanBtn.hidden = !status.running;
+  removeFolderBtn.disabled = status.running;
+
   if (status.error_message) {
     folderStatus.textContent = `Error: ${status.error_message}`;
   } else if (status.phase === "discovering") {
     folderStatus.textContent = "Scanning folder for audio files…";
   } else if (status.phase === "processing") {
     folderStatus.textContent = `Analyzing ${status.processed}/${status.to_process} new files (${status.errors} errors)…`;
+  } else if (status.phase === "cancelled") {
+    folderStatus.textContent = `Cancelled after ${status.processed}/${status.to_process} files (kept what finished).`;
   } else if (status.phase === "done") {
     folderStatus.textContent =
       status.to_process === 0
@@ -280,6 +288,33 @@ async function startScan() {
 }
 
 scanBtn.addEventListener("click", startScan);
+
+cancelScanBtn.addEventListener("click", async () => {
+  cancelScanBtn.disabled = true;
+  await fetch("/library/scan/cancel", { method: "POST" });
+  cancelScanBtn.disabled = false;
+});
+
+removeFolderBtn.addEventListener("click", async () => {
+  const folder = folderInput.value.trim();
+  if (!folder) return;
+  const ok = window.confirm(
+    `Remove every track under "${folder}" from the library?\n\nThis only removes them from Crate Flip's index — it does not delete or move the actual files.`
+  );
+  if (!ok) return;
+
+  const res = await fetch("/library/remove-folder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folder }),
+  });
+  const body = await res.json();
+  folderStatus.textContent = `Removed ${body.removed} track(s) from the library.`;
+  refreshStats();
+  if (current && current.path && (current.path + "/").startsWith(folder.replace(/\/?$/, "/"))) {
+    loadNext();
+  }
+});
 
 (async function resumeScanIfRunning() {
   const res = await fetch("/library/scan/status");

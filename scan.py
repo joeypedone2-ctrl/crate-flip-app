@@ -32,10 +32,13 @@ def _worker(path_str):
         return path_str, None, str(exc)
 
 
-def scan(folder, db_path, limit=None, workers=None, on_progress=None):
+def scan(folder, db_path, limit=None, workers=None, on_progress=None, cancel_event=None):
     def report(**fields):
         if on_progress is not None:
             on_progress(fields)
+
+    def is_cancelled():
+        return cancel_event is not None and cancel_event.is_set()
 
     workers = workers or os.cpu_count() or 4
     report(phase="discovering")
@@ -65,6 +68,7 @@ def scan(folder, db_path, limit=None, workers=None, on_progress=None):
 
     start = time.perf_counter()
     processed, errors = 0, 0
+    cancelled = False
     with db.connect(db_path) as conn:
         with ProcessPoolExecutor(max_workers=workers) as pool:
             futures = {pool.submit(_worker, p): p for p in to_process}
@@ -90,15 +94,20 @@ def scan(folder, db_path, limit=None, workers=None, on_progress=None):
                         processed=processed,
                         errors=errors,
                     )
+                if is_cancelled():
+                    cancelled = True
+                    print("  cancelled — stopping and dropping unstarted work")
+                    pool.shutdown(wait=False, cancel_futures=True)
+                    break
         conn.commit()
 
     elapsed = time.perf_counter() - start
     print(
-        f"Done in {elapsed:.1f}s "
+        f"{'Cancelled' if cancelled else 'Done'} in {elapsed:.1f}s "
         f"({elapsed / max(processed, 1):.2f}s/file avg wall time, {workers} workers)"
     )
     report(
-        phase="done",
+        phase="cancelled" if cancelled else "done",
         discovered=len(discovered),
         to_process=len(to_process),
         processed=processed,

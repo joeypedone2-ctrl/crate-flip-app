@@ -23,8 +23,12 @@
       <input id="folder-input" type="text" placeholder="/path/to/your/music" autocomplete="off" />
       <button id="browse-btn" class="folder-btn" hidden>Browse…</button>
       <button id="scan-btn" class="folder-btn folder-btn-primary">Scan</button>
+      <button id="cancel-scan-btn" class="folder-btn folder-btn-danger" hidden>Cancel</button>
     </div>
-    <div id="folder-status" class="folder-status"></div>
+    <div class="folder-row-secondary">
+      <div id="folder-status" class="folder-status"></div>
+      <button id="remove-folder-btn" class="folder-link-btn">Remove this folder from library</button>
+    </div>
   </div>
 
   <main id="review-area">
