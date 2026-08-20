@@ -64,12 +64,16 @@ function render(track) {
   emptyState.hidden = true;
 
   filenameEl.textContent = track.filename;
+  // "Revert" always means "back to what the model predicted" — but the
+  // displayed starting point favors an existing confirmed edit, since
+  // re-opening an already-decided track (e.g. from the browse table)
+  // should show what you actually chose, not the original guess.
   predictedGenre = track.predicted_genre || "";
   predictedEnergy = track.predicted_energy || 3;
-  genreInput.value = predictedGenre;
-  currentEnergy = predictedEnergy;
+  genreInput.value = track.confirmed_genre || predictedGenre;
+  currentEnergy = track.confirmed_energy || predictedEnergy;
   paintStars(currentEnergy);
-  revertBtn.hidden = true;
+  checkDirty();
 
   player.pause();
   player.src = `/tracks/${track.id}/audio`;
@@ -201,6 +205,16 @@ function skipTrack() {
   loadNext(current.id);
 }
 
+async function reviewTrack(trackId) {
+  const res = await fetch(`/tracks/${trackId}`);
+  if (!res.ok) return;
+  if (current) history.push(current.id);
+  current = await res.json();
+  render(current);
+  refreshStats();
+  showReviewMode();
+}
+
 document.getElementById("confirm-btn").addEventListener("click", confirmTrack);
 document.getElementById("delete-btn").addEventListener("click", deleteTrack);
 document.getElementById("skip-btn").addEventListener("click", skipTrack);
@@ -316,6 +330,161 @@ removeFolderBtn.addEventListener("click", async () => {
   }
 });
 
+const reviewArea = document.getElementById("review-area");
+const browseArea = document.getElementById("browse-area");
+const browseToggleBtn = document.getElementById("browse-toggle-btn");
+const browseSearch = document.getElementById("browse-search");
+const browseStatusFilter = document.getElementById("browse-status-filter");
+const browseTbody = document.getElementById("browse-tbody");
+const browseEmpty = document.getElementById("browse-empty");
+
+let libraryTracks = [];
+let librarySortKey = "id";
+let librarySortDir = "asc";
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function compareTracksBy(a, b, key, dir) {
+  let av;
+  let bv;
+  if (key === "filename") {
+    av = a.filename.toLowerCase();
+    bv = b.filename.toLowerCase();
+  } else if (key === "genre") {
+    av = (a.confirmed_genre || a.predicted_genre || "").toLowerCase();
+    bv = (b.confirmed_genre || b.predicted_genre || "").toLowerCase();
+  } else if (key === "energy") {
+    av = a.confirmed_energy || a.predicted_energy || 0;
+    bv = b.confirmed_energy || b.predicted_energy || 0;
+  } else if (key === "status") {
+    av = a.status;
+    bv = b.status;
+  } else if (key === "modified") {
+    av = a.file_mtime || 0;
+    bv = b.file_mtime || 0;
+  } else if (key === "duration") {
+    av = a.file_duration_sec || 0;
+    bv = b.file_duration_sec || 0;
+  } else {
+    av = a.id;
+    bv = b.id;
+  }
+  if (av < bv) return dir === "asc" ? -1 : 1;
+  if (av > bv) return dir === "asc" ? 1 : -1;
+  return 0;
+}
+
+function trackRowHtml(t) {
+  const genre = escapeHtml(t.confirmed_genre || t.predicted_genre || "–");
+  const energy = t.confirmed_energy || t.predicted_energy;
+  const energyLabel = energy ? `★ ${energy}` : "–";
+  const modified = t.file_mtime ? new Date(t.file_mtime * 1000).toLocaleDateString() : "–";
+  const duration = t.file_duration_sec ? formatTime(t.file_duration_sec) : "–";
+  const filename = escapeHtml(t.filename);
+  const actions =
+    t.status === "deleted"
+      ? ""
+      : `<button class="browse-action-btn" data-action="review" data-id="${t.id}">Review</button>
+         <button class="browse-action-btn danger" data-action="delete" data-id="${t.id}">Delete</button>`;
+
+  return `
+    <tr>
+      <td class="browse-filename" title="${filename}">${filename}</td>
+      <td>${genre}</td>
+      <td>${energyLabel}</td>
+      <td><span class="browse-badge browse-badge-${t.status}">${t.status}</span></td>
+      <td>${modified}</td>
+      <td>${duration}</td>
+      <td><div class="browse-row-actions">${actions}</div></td>
+    </tr>
+  `;
+}
+
+function renderBrowseTable() {
+  const query = browseSearch.value.trim().toLowerCase();
+  const statusValue = browseStatusFilter.value;
+
+  let rows = libraryTracks;
+  if (statusValue !== "all") rows = rows.filter((t) => t.status === statusValue);
+  if (query) {
+    rows = rows.filter((t) => {
+      const genre = (t.confirmed_genre || t.predicted_genre || "").toLowerCase();
+      return t.filename.toLowerCase().includes(query) || genre.includes(query);
+    });
+  }
+  rows = [...rows].sort((a, b) => compareTracksBy(a, b, librarySortKey, librarySortDir));
+
+  browseTbody.innerHTML = rows.map(trackRowHtml).join("");
+  browseEmpty.hidden = rows.length > 0;
+
+  document.querySelectorAll(".browse-table th[data-sort]").forEach((th) => {
+    const isSorted = th.dataset.sort === librarySortKey;
+    th.classList.toggle("sorted", isSorted);
+    th.dataset.dir = isSorted ? (librarySortDir === "asc" ? "↑" : "↓") : "";
+  });
+}
+
+function showReviewMode() {
+  browseArea.hidden = true;
+  reviewArea.hidden = false;
+}
+
+function showBrowseMode() {
+  reviewArea.hidden = true;
+  browseArea.hidden = false;
+}
+
+async function openBrowse() {
+  showBrowseMode();
+  const res = await fetch("/tracks/all");
+  libraryTracks = await res.json();
+  renderBrowseTable();
+}
+
+browseToggleBtn.addEventListener("click", () => {
+  if (browseArea.hidden) {
+    openBrowse();
+  } else {
+    showReviewMode();
+  }
+});
+
+browseSearch.addEventListener("input", renderBrowseTable);
+browseStatusFilter.addEventListener("change", renderBrowseTable);
+
+document.querySelectorAll(".browse-table th[data-sort]").forEach((th) => {
+  th.addEventListener("click", () => {
+    const key = th.dataset.sort;
+    if (librarySortKey === key) {
+      librarySortDir = librarySortDir === "asc" ? "desc" : "asc";
+    } else {
+      librarySortKey = key;
+      librarySortDir = "asc";
+    }
+    renderBrowseTable();
+  });
+});
+
+browseTbody.addEventListener("click", async (event) => {
+  const btn = event.target.closest("[data-action]");
+  if (!btn) return;
+  const id = parseInt(btn.dataset.id, 10);
+
+  if (btn.dataset.action === "review") {
+    reviewTrack(id);
+  } else if (btn.dataset.action === "delete") {
+    await fetch(`/tracks/${id}/delete`, { method: "POST" });
+    const track = libraryTracks.find((t) => t.id === id);
+    if (track) track.status = "deleted";
+    renderBrowseTable();
+    refreshStats();
+  }
+});
+
 (async function resumeScanIfRunning() {
   const res = await fetch("/library/scan/status");
   const status = await res.json();
@@ -328,7 +497,8 @@ removeFolderBtn.addEventListener("click", async () => {
 })();
 
 document.addEventListener("keydown", (event) => {
-  const isTypingTarget = event.target === genreInput || event.target === folderInput;
+  const isTypingTarget =
+    event.target === genreInput || event.target === folderInput || event.target === browseSearch;
   if (isTypingTarget) return;
 
   const key = event.key.toLowerCase();

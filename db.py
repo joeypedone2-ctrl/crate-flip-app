@@ -144,6 +144,10 @@ def delete_tracks_under_folder(conn, folder):
     return matching_ids
 
 
+def get_all_tracks(conn):
+    return conn.execute("SELECT * FROM tracks ORDER BY id").fetchall()
+
+
 def get_stats(conn):
     row = conn.execute(
         """

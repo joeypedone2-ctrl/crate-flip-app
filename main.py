@@ -164,6 +164,13 @@ def track_stats():
         return db.get_stats(conn)
 
 
+@app.get("/tracks/all")
+def all_tracks():
+    with db.connect(DB_PATH) as conn:
+        rows = db.get_all_tracks(conn)
+    return [_track_to_dict(row) for row in rows]
+
+
 @app.get("/tracks/next")
 def next_track(after_id: int = 0):
     with db.connect(DB_PATH) as conn:

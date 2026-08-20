@@ -10,6 +10,11 @@
     <h1>Crate Flip</h1>
     <div class="header-right">
       <div id="stats">loading…</div>
+      <button id="browse-toggle-btn" class="folder-toggle-btn" title="Browse library" aria-label="Browse library">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>
+        </svg>
+      </button>
       <button id="folder-toggle-btn" class="folder-toggle-btn" title="Add music folder" aria-label="Add music folder">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
@@ -29,6 +34,44 @@
       <div id="folder-status" class="folder-status"></div>
       <button id="remove-folder-btn" class="folder-link-btn">Remove this folder from library</button>
     </div>
+  </div>
+
+  <div id="browse-area" class="browse-area" hidden>
+    <div class="browse-controls">
+      <input id="browse-search" type="text" placeholder="Search filename or genre…" autocomplete="off" />
+      <select id="browse-status-filter">
+        <option value="all">All statuses</option>
+        <option value="pending">Pending</option>
+        <option value="confirmed">Confirmed</option>
+        <option value="deleted">Deleted</option>
+      </select>
+    </div>
+    <div class="browse-table-wrap">
+      <table class="browse-table">
+        <colgroup>
+          <col style="width: auto;" />
+          <col style="width: 130px;" />
+          <col style="width: 70px;" />
+          <col style="width: 95px;" />
+          <col style="width: 100px;" />
+          <col style="width: 75px;" />
+          <col style="width: 150px;" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th data-sort="filename">Filename</th>
+            <th data-sort="genre">Genre</th>
+            <th data-sort="energy">Energy</th>
+            <th data-sort="status">Status</th>
+            <th data-sort="modified">Modified</th>
+            <th data-sort="duration">Duration</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="browse-tbody"></tbody>
+      </table>
+    </div>
+    <div id="browse-empty" class="browse-empty" hidden>No tracks match.</div>
   </div>
 
   <main id="review-area">
