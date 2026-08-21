@@ -4,6 +4,7 @@ via pywebview, instead of a browser tab.
 """
 
 import os
+import sys
 import threading
 
 import uvicorn
@@ -15,6 +16,24 @@ HOST = "127.0.0.1"
 PORT = 8756
 
 SERVER = uvicorn.Server(uvicorn.Config(app, host=HOST, port=PORT, log_level="warning"))
+
+
+def _enable_click_through_activation():
+    # macOS windows consume their first click after becoming active just to
+    # focus the window — it never reaches the control underneath. WKWebView
+    # doesn't opt out of that default, so every toolbar button needs two
+    # clicks right after switching to the app. Patch NSView itself to accept
+    # the first click everywhere in this app's window.
+    if sys.platform != "darwin":
+        return
+    import objc
+    from AppKit import NSView
+
+    def acceptsFirstMouse_(self, event):
+        return True
+
+    method = objc.selector(acceptsFirstMouse_, selector=b"acceptsFirstMouse:", signature=b"B@:@")
+    objc.classAddMethod(NSView, b"acceptsFirstMouse:", method)
 
 
 def _run_server():
@@ -40,6 +59,8 @@ def _on_closing():
 
 
 def main():
+    _enable_click_through_activation()
+
     server_thread = threading.Thread(target=_run_server, daemon=True)
     server_thread.start()
 
