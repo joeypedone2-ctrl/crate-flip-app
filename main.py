@@ -1,5 +1,7 @@
+import multiprocessing
 import subprocess
 import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -25,7 +27,28 @@ ART_STRIP_EXTENSIONS = {".mp3", ".m4a", ".aiff", ".aif"}
 # partway in instead — same offset used for feature-extraction windowing.
 PREVIEW_START_OFFSET_SEC = ANALYSIS_OFFSET_SEC
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    # A scan's ProcessPoolExecutor workers are separate OS processes, spawned
+    # fresh (not forked) on macOS. If this process dies without them being
+    # told to stop, they don't die with it — they keep chewing through
+    # already-submitted files independently, pinning every core until the
+    # whole backlog finishes. Ask nicely first (lets the in-flight file finish
+    # and the pool wind itself down cleanly), but a file already in progress
+    # won't even notice the cancel flag until it completes, so cap the wait
+    # and then kill any worker processes still standing — that's the actual
+    # guarantee, not the cooperative join.
+    if SCAN_STATE["running"]:
+        SCAN_CANCEL_EVENT.set()
+        if SCAN_THREAD is not None:
+            SCAN_THREAD.join(timeout=5)
+    for child in multiprocessing.active_children():
+        child.kill()
+
+
+app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -70,6 +93,7 @@ SCAN_STATE = {
 
 
 SCAN_CANCEL_EVENT = threading.Event()
+SCAN_THREAD = None
 
 
 def _run_scan_in_background(folder):
@@ -122,6 +146,7 @@ def start_scan(body: ScanRequest):
     if not folder_path.is_dir():
         raise HTTPException(status_code=400, detail=f"Not a folder: {body.folder}")
 
+    global SCAN_THREAD
     SCAN_CANCEL_EVENT.clear()
     SCAN_STATE.update(
         running=True,
@@ -133,7 +158,8 @@ def start_scan(body: ScanRequest):
         errors=0,
         error_message=None,
     )
-    threading.Thread(target=_run_scan_in_background, args=(str(folder_path),), daemon=True).start()
+    SCAN_THREAD = threading.Thread(target=_run_scan_in_background, args=(str(folder_path),), daemon=True)
+    SCAN_THREAD.start()
     return dict(SCAN_STATE)
 
 
