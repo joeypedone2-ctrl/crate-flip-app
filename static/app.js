@@ -334,8 +334,8 @@ const reviewArea = document.getElementById("review-area");
 const browseArea = document.getElementById("browse-area");
 const browseToggleBtn = document.getElementById("browse-toggle-btn");
 const browseSearch = document.getElementById("browse-search");
-const browseStatusFilter = document.getElementById("browse-status-filter");
 const browseTbody = document.getElementById("browse-tbody");
+const colFilterPopover = document.getElementById("col-filter-popover");
 const browseEmpty = document.getElementById("browse-empty");
 
 let libraryTracks = [];
@@ -404,18 +404,379 @@ function trackRowHtml(t) {
   `;
 }
 
+// --- Per-column Excel-style filtering ---------------------------------
+//
+// Each column has a filter "type" that determines both the popover UI and
+// the match logic: "text" (freeform, contains/starts with/etc — filename,
+// where a checklist of distinct values would be unwieldy), "values" (a
+// checklist of distinct values — genre/status, where the set is small and
+// finite), "number" (operator + value(s) — energy/duration), or "date"
+// (operator + date(s) — modified). columnFilters holds at most one active
+// filter object per column key; an absent/undefined entry means "no filter".
+const COLUMN_CONFIG = {
+  filename: { type: "text", get: (t) => t.filename },
+  genre: { type: "values", get: (t) => t.confirmed_genre || t.predicted_genre || "–" },
+  energy: { type: "number", get: (t) => t.confirmed_energy || t.predicted_energy || null, options: [1, 2, 3, 4, 5] },
+  status: { type: "values", get: (t) => t.status },
+  modified: { type: "date", get: (t) => t.file_mtime || null },
+  duration: { type: "number", get: (t) => t.file_duration_sec || null, isDuration: true },
+};
+
+const TEXT_OPS = [
+  ["contains", "Contains"],
+  ["not_contains", "Does not contain"],
+  ["equals", "Equals"],
+  ["starts_with", "Starts with"],
+  ["ends_with", "Ends with"],
+  ["is_blank", "Is blank"],
+  ["is_not_blank", "Is not blank"],
+];
+
+const NUMBER_OPS = [
+  ["eq", "Equals"],
+  ["neq", "Does not equal"],
+  ["gt", "Greater than"],
+  ["gte", "Greater than or equal to"],
+  ["lt", "Less than"],
+  ["lte", "Less than or equal to"],
+  ["between", "Between"],
+];
+
+const DATE_OPS = [
+  ["on", "On"],
+  ["before", "Before"],
+  ["after", "After"],
+  ["between", "Between"],
+];
+
+let columnFilters = {};
+let activeFilterCol = null;
+
+function parseDurationInput(str) {
+  str = String(str).trim();
+  if (!str) return NaN;
+  if (str.includes(":")) {
+    const [m, s] = str.split(":").map(Number);
+    if (Number.isNaN(m) || Number.isNaN(s)) return NaN;
+    return m * 60 + s;
+  }
+  return parseFloat(str);
+}
+
+function textFilterMatch(filter, rawValue) {
+  const v = String(rawValue || "").toLowerCase();
+  const q = String(filter.value || "").toLowerCase();
+  switch (filter.op) {
+    case "contains": return v.includes(q);
+    case "not_contains": return !v.includes(q);
+    case "equals": return v === q;
+    case "starts_with": return v.startsWith(q);
+    case "ends_with": return v.endsWith(q);
+    case "is_blank": return v === "";
+    case "is_not_blank": return v !== "";
+    default: return true;
+  }
+}
+
+function numberFilterMatch(filter, rawValue) {
+  if (rawValue === null || rawValue === undefined || Number.isNaN(rawValue)) return false;
+  const a = filter.value;
+  const b = filter.value2;
+  switch (filter.op) {
+    case "eq": return rawValue === a;
+    case "neq": return rawValue !== a;
+    case "gt": return rawValue > a;
+    case "gte": return rawValue >= a;
+    case "lt": return rawValue < a;
+    case "lte": return rawValue <= a;
+    case "between": return rawValue >= Math.min(a, b) && rawValue <= Math.max(a, b);
+    default: return true;
+  }
+}
+
+function dateFilterMatch(filter, mtimeSec) {
+  if (!mtimeSec) return false;
+  const d = new Date(mtimeSec * 1000);
+  const day = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  const parse = (s) => {
+    const [y, m, dd] = s.split("-").map(Number);
+    return Date.UTC(y, m - 1, dd);
+  };
+  const a = parse(filter.value);
+  switch (filter.op) {
+    case "on": return day === a;
+    case "before": return day < a;
+    case "after": return day > a;
+    case "between": {
+      const b = parse(filter.value2);
+      return day >= Math.min(a, b) && day <= Math.max(a, b);
+    }
+    default: return true;
+  }
+}
+
+function valuesFilterMatch(filter, rawValue) {
+  return filter.selected.has(rawValue);
+}
+
+function trackPassesColumnFilters(t) {
+  for (const col in columnFilters) {
+    const filter = columnFilters[col];
+    if (!filter) continue;
+    const config = COLUMN_CONFIG[col];
+    const rawValue = config.get(t);
+    let ok;
+    if (config.type === "text") ok = textFilterMatch(filter, rawValue);
+    else if (config.type === "number") ok = numberFilterMatch(filter, rawValue);
+    else if (config.type === "date") ok = dateFilterMatch(filter, rawValue);
+    else ok = valuesFilterMatch(filter, rawValue);
+    if (!ok) return false;
+  }
+  return true;
+}
+
+function distinctValuesFor(col) {
+  const config = COLUMN_CONFIG[col];
+  const set = new Set();
+  libraryTracks.forEach((t) => set.add(config.get(t)));
+  return [...set].sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+function closeColumnFilter() {
+  colFilterPopover.hidden = true;
+  activeFilterCol = null;
+}
+
+function positionPopover(anchorEl) {
+  const rect = anchorEl.getBoundingClientRect();
+  const popW = 240;
+  let left = rect.left;
+  if (left + popW > window.innerWidth - 8) left = window.innerWidth - popW - 8;
+  colFilterPopover.style.left = `${Math.max(8, left)}px`;
+  colFilterPopover.style.top = `${rect.bottom + 6}px`;
+}
+
+function buildTextFilterHtml(existing) {
+  const op = existing?.op || "contains";
+  const value = existing?.value || "";
+  const hideValue = op === "is_blank" || op === "is_not_blank";
+  const opts = TEXT_OPS.map(([v, label]) => `<option value="${v}"${v === op ? " selected" : ""}>${label}</option>`).join("");
+  return `
+    <div class="cf-row"><select class="cf-op">${opts}</select></div>
+    <div class="cf-row cf-value1-row"${hideValue ? " hidden" : ""}><input type="text" class="cf-value" placeholder="Filter value…" value="${escapeHtml(value)}" /></div>
+    <div class="col-filter-actions">
+      <button type="button" class="cf-clear">Clear</button>
+      <button type="button" class="cf-apply">Apply</button>
+    </div>
+  `;
+}
+
+function buildNumberFilterHtml(existing, config) {
+  const op = existing?.op || "gte";
+  const value = existing?.value ?? "";
+  const value2 = existing?.value2 ?? "";
+  const isBetween = op === "between";
+  const placeholder = config.isDuration ? "mm:ss or seconds" : "";
+  const opts = NUMBER_OPS.map(([v, label]) => `<option value="${v}"${v === op ? " selected" : ""}>${label}</option>`).join("");
+
+  const valueInput = (cls, val) => {
+    if (config.options) {
+      const inner = config.options
+        .map((o) => `<option value="${o}"${String(o) === String(val) ? " selected" : ""}>${o}</option>`)
+        .join("");
+      return `<select class="${cls}"><option value="">–</option>${inner}</select>`;
+    }
+    return `<input type="text" class="${cls}" placeholder="${placeholder}" value="${escapeHtml(String(val))}" />`;
+  };
+
+  return `
+    <div class="cf-row"><select class="cf-op">${opts}</select></div>
+    <div class="cf-row cf-value1-row">${valueInput("cf-value", value)}</div>
+    <div class="cf-row cf-value2-row"${isBetween ? "" : " hidden"}>${valueInput("cf-value2", value2)}</div>
+    <div class="col-filter-actions">
+      <button type="button" class="cf-clear">Clear</button>
+      <button type="button" class="cf-apply">Apply</button>
+    </div>
+  `;
+}
+
+function buildDateFilterHtml(existing) {
+  const op = existing?.op || "on";
+  const value = existing?.value || "";
+  const value2 = existing?.value2 || "";
+  const isBetween = op === "between";
+  const opts = DATE_OPS.map(([v, label]) => `<option value="${v}"${v === op ? " selected" : ""}>${label}</option>`).join("");
+  return `
+    <div class="cf-row"><select class="cf-op">${opts}</select></div>
+    <div class="cf-row cf-value1-row"><input type="date" class="cf-value" value="${value}" /></div>
+    <div class="cf-row cf-value2-row"${isBetween ? "" : " hidden"}><input type="date" class="cf-value2" value="${value2}" /></div>
+    <div class="col-filter-actions">
+      <button type="button" class="cf-clear">Clear</button>
+      <button type="button" class="cf-apply">Apply</button>
+    </div>
+  `;
+}
+
+function buildValuesFilterHtml(col, existing) {
+  const allValues = distinctValuesFor(col);
+  const selected = existing?.selected || new Set(allValues);
+  const allChecked = allValues.every((v) => selected.has(v));
+  const rows = allValues
+    .map((v) => {
+      const label = v === "" || v == null ? "(blank)" : String(v);
+      const checked = selected.has(v) ? " checked" : "";
+      return `<label class="cf-value-row"><input type="checkbox" class="cf-val-check" value="${escapeHtml(String(v))}"${checked} /><span>${escapeHtml(label)}</span></label>`;
+    })
+    .join("");
+  return `
+    <div class="cf-row"><input type="text" class="cf-search" placeholder="Search values…" /></div>
+    <div class="cf-values-list">
+      <label class="cf-value-row cf-select-all-row"><input type="checkbox" class="cf-select-all"${allChecked ? " checked" : ""} /><span>(Select all)</span></label>
+      <div class="cf-values-body">${rows}</div>
+    </div>
+    <div class="col-filter-actions">
+      <button type="button" class="cf-clear">Clear</button>
+      <button type="button" class="cf-apply">Apply</button>
+    </div>
+  `;
+}
+
+function readFilterFromPopover(config) {
+  if (config.type === "text") {
+    return {
+      op: colFilterPopover.querySelector(".cf-op").value,
+      value: colFilterPopover.querySelector(".cf-value").value.trim(),
+    };
+  }
+  if (config.type === "number") {
+    const op = colFilterPopover.querySelector(".cf-op").value;
+    const parse = config.isDuration ? parseDurationInput : parseFloat;
+    const value = parse(colFilterPopover.querySelector(".cf-value").value);
+    const value2 = op === "between" ? parse(colFilterPopover.querySelector(".cf-value2").value) : undefined;
+    return { op, value, value2 };
+  }
+  if (config.type === "date") {
+    const op = colFilterPopover.querySelector(".cf-op").value;
+    const value = colFilterPopover.querySelector(".cf-value").value;
+    const value2 = op === "between" ? colFilterPopover.querySelector(".cf-value2").value : undefined;
+    return { op, value, value2 };
+  }
+  const selected = new Set([...colFilterPopover.querySelectorAll(".cf-val-check:checked")].map((cb) => cb.value));
+  return { selected };
+}
+
+function wirePopoverEvents(col, config) {
+  const opSelect = colFilterPopover.querySelector(".cf-op");
+  if (opSelect) {
+    opSelect.addEventListener("change", () => {
+      const op = opSelect.value;
+      const value1Row = colFilterPopover.querySelector(".cf-value1-row");
+      const value2Row = colFilterPopover.querySelector(".cf-value2-row");
+      if (config.type === "text") {
+        value1Row.hidden = op === "is_blank" || op === "is_not_blank";
+      } else if (value2Row) {
+        value2Row.hidden = op !== "between";
+      }
+    });
+  }
+
+  const selectAll = colFilterPopover.querySelector(".cf-select-all");
+  if (selectAll) {
+    const checks = () => [...colFilterPopover.querySelectorAll(".cf-val-check")];
+    selectAll.addEventListener("change", () => {
+      checks().forEach((cb) => (cb.checked = selectAll.checked));
+    });
+    checks().forEach((cb) => {
+      cb.addEventListener("change", () => {
+        selectAll.checked = checks().every((c) => c.checked);
+      });
+    });
+  }
+
+  const searchInput = colFilterPopover.querySelector(".cf-search");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      const q = searchInput.value.trim().toLowerCase();
+      colFilterPopover.querySelectorAll(".cf-values-body .cf-value-row").forEach((row) => {
+        row.hidden = !row.querySelector("span").textContent.toLowerCase().includes(q);
+      });
+    });
+  }
+
+  colFilterPopover.querySelector(".cf-clear").addEventListener("click", () => {
+    delete columnFilters[col];
+    closeColumnFilter();
+    renderBrowseTable();
+  });
+
+  colFilterPopover.querySelector(".cf-apply").addEventListener("click", () => {
+    const filter = readFilterFromPopover(config);
+    let invalid = false;
+    if (config.type === "number") {
+      invalid = Number.isNaN(filter.value) || (filter.op === "between" && Number.isNaN(filter.value2));
+    } else if (config.type === "date") {
+      invalid = !filter.value || (filter.op === "between" && !filter.value2);
+    } else if (config.type === "text") {
+      invalid = !["is_blank", "is_not_blank"].includes(filter.op) && !filter.value;
+    } else if (config.type === "values") {
+      invalid = filter.selected.size === distinctValuesFor(col).length;
+    }
+    if (invalid) delete columnFilters[col];
+    else columnFilters[col] = filter;
+    closeColumnFilter();
+    renderBrowseTable();
+  });
+}
+
+function openColumnFilter(col, btnEl) {
+  if (activeFilterCol === col && !colFilterPopover.hidden) {
+    closeColumnFilter();
+    return;
+  }
+  activeFilterCol = col;
+  const config = COLUMN_CONFIG[col];
+  const existing = columnFilters[col];
+
+  let html;
+  if (config.type === "text") html = buildTextFilterHtml(existing);
+  else if (config.type === "number") html = buildNumberFilterHtml(existing, config);
+  else if (config.type === "date") html = buildDateFilterHtml(existing);
+  else html = buildValuesFilterHtml(col, existing);
+
+  colFilterPopover.innerHTML = html;
+  colFilterPopover.hidden = false;
+  positionPopover(btnEl);
+  wirePopoverEvents(col, config);
+}
+
+document.querySelectorAll(".col-filter-btn").forEach((btn) => {
+  btn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openColumnFilter(btn.dataset.col, btn);
+  });
+});
+
+document.addEventListener("click", (event) => {
+  if (colFilterPopover.hidden) return;
+  if (colFilterPopover.contains(event.target)) return;
+  closeColumnFilter();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (!colFilterPopover.hidden && event.key === "Escape") closeColumnFilter();
+});
+
 function renderBrowseTable() {
   const query = browseSearch.value.trim().toLowerCase();
-  const statusValue = browseStatusFilter.value;
 
   let rows = libraryTracks;
-  if (statusValue !== "all") rows = rows.filter((t) => t.status === statusValue);
   if (query) {
     rows = rows.filter((t) => {
       const genre = (t.confirmed_genre || t.predicted_genre || "").toLowerCase();
       return t.filename.toLowerCase().includes(query) || genre.includes(query);
     });
   }
+  rows = rows.filter(trackPassesColumnFilters);
   rows = [...rows].sort((a, b) => compareTracksBy(a, b, librarySortKey, librarySortDir));
 
   browseTbody.innerHTML = rows.map(trackRowHtml).join("");
@@ -425,6 +786,10 @@ function renderBrowseTable() {
     const isSorted = th.dataset.sort === librarySortKey;
     th.classList.toggle("sorted", isSorted);
     th.dataset.dir = isSorted ? (librarySortDir === "asc" ? "↑" : "↓") : "";
+  });
+
+  document.querySelectorAll(".col-filter-btn").forEach((btn) => {
+    btn.classList.toggle("active", !!columnFilters[btn.dataset.col]);
   });
 }
 
@@ -454,7 +819,6 @@ browseToggleBtn.addEventListener("click", () => {
 });
 
 browseSearch.addEventListener("input", renderBrowseTable);
-browseStatusFilter.addEventListener("change", renderBrowseTable);
 
 document.querySelectorAll(".browse-table th[data-sort]").forEach((th) => {
   th.addEventListener("click", () => {

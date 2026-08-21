@@ -250,17 +250,6 @@ header h1 {
   border-color: var(--accent);
 }
 
-#browse-status-filter {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 10px;
-  padding: 0.6rem 0.8rem;
-  font-family: inherit;
-  font-size: 0.85rem;
-  outline: none;
-}
-
 .browse-table-wrap {
   width: 100%;
   overflow-x: auto;
@@ -295,9 +284,165 @@ header h1 {
   color: var(--text);
 }
 
-.browse-table th.sorted::after {
+.browse-table th.sorted .th-label::after {
   content: " " attr(data-dir);
   color: var(--accent);
+}
+
+.th-label {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.col-filter-btn {
+  display: inline-flex;
+  vertical-align: middle;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 0.3rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.col-filter-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.col-filter-btn:hover {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+.col-filter-btn.active {
+  color: var(--accent);
+}
+
+.col-filter-popover {
+  position: fixed;
+  z-index: 40;
+  width: 240px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px var(--shadow);
+  padding: 0.7rem;
+  font-size: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  cursor: default;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+
+.col-filter-popover[hidden] {
+  display: none;
+}
+
+.col-filter-popover select,
+.col-filter-popover input[type="text"],
+.col-filter-popover input[type="number"],
+.col-filter-popover input[type="date"] {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.8rem;
+  outline: none;
+}
+
+.col-filter-popover select:focus,
+.col-filter-popover input:focus {
+  border-color: var(--accent);
+}
+
+.cf-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.cf-row[hidden] {
+  display: none;
+}
+
+.cf-values-list {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.3rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.cf-value-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.2rem 0;
+  cursor: pointer;
+}
+
+.cf-value-row input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.cf-value-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cf-select-all-row {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.3rem;
+  margin-bottom: 0.15rem;
+  font-weight: 600;
+}
+
+.col-filter-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-top: 0.2rem;
+}
+
+.col-filter-actions button {
+  flex: 1;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.col-filter-actions .cf-apply {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.col-filter-actions button:hover {
+  filter: brightness(1.08);
 }
 
 .browse-table td {
