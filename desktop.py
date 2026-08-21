@@ -21,19 +21,20 @@ SERVER = uvicorn.Server(uvicorn.Config(app, host=HOST, port=PORT, log_level="war
 def _enable_click_through_activation():
     # macOS windows consume their first click after becoming active just to
     # focus the window — it never reaches the control underneath. WKWebView
-    # doesn't opt out of that default, so every toolbar button needs two
-    # clicks right after switching to the app. Patch NSView itself to accept
-    # the first click everywhere in this app's window.
+    # provides its own acceptsFirstMouse: (returning NO), which shadows a
+    # patch on the generic NSView base class — the ObjC runtime resolves the
+    # method from WKWebView's own class first and never reaches NSView's.
+    # So the patch has to target WKWebView itself, not NSView.
     if sys.platform != "darwin":
         return
     import objc
-    from AppKit import NSView
+    from WebKit import WKWebView
 
     def acceptsFirstMouse_(self, event):
         return True
 
     method = objc.selector(acceptsFirstMouse_, selector=b"acceptsFirstMouse:", signature=b"B@:@")
-    objc.classAddMethod(NSView, b"acceptsFirstMouse:", method)
+    objc.classAddMethod(WKWebView, b"acceptsFirstMouse:", method)
 
 
 def _run_server():
