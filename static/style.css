@@ -76,6 +76,19 @@ header h1 {
   margin: 0;
 }
 
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.logo {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  color: var(--text);
+}
+
 #stats {
   font-size: 0.9rem;
   color: var(--text-dim);
