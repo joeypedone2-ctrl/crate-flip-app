@@ -39,32 +39,56 @@
   <div id="browse-area" class="browse-area" hidden>
     <div class="browse-controls">
       <input id="browse-search" type="text" placeholder="Search filename or genre…" autocomplete="off" />
-      <select id="browse-status-filter">
-        <option value="all">All statuses</option>
-        <option value="pending">Pending</option>
-        <option value="confirmed">Confirmed</option>
-        <option value="deleted">Deleted</option>
-      </select>
     </div>
     <div class="browse-table-wrap">
       <table class="browse-table">
         <colgroup>
           <col style="width: auto;" />
-          <col style="width: 130px;" />
-          <col style="width: 70px;" />
+          <col style="width: 150px;" />
+          <col style="width: 90px;" />
+          <col style="width: 115px;" />
+          <col style="width: 115px;" />
           <col style="width: 95px;" />
-          <col style="width: 100px;" />
-          <col style="width: 75px;" />
           <col style="width: 150px;" />
         </colgroup>
         <thead>
           <tr>
-            <th data-sort="filename">Filename</th>
-            <th data-sort="genre">Genre</th>
-            <th data-sort="energy">Energy</th>
-            <th data-sort="status">Status</th>
-            <th data-sort="modified">Modified</th>
-            <th data-sort="duration">Duration</th>
+            <th data-sort="filename">
+              <span class="th-label">Filename</span>
+              <button type="button" class="col-filter-btn" data-col="filename" aria-label="Filter Filename" title="Filter">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7v6l-4 2v-8z"/></svg>
+              </button>
+            </th>
+            <th data-sort="genre">
+              <span class="th-label">Genre</span>
+              <button type="button" class="col-filter-btn" data-col="genre" aria-label="Filter Genre" title="Filter">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7v6l-4 2v-8z"/></svg>
+              </button>
+            </th>
+            <th data-sort="energy">
+              <span class="th-label">Energy</span>
+              <button type="button" class="col-filter-btn" data-col="energy" aria-label="Filter Energy" title="Filter">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7v6l-4 2v-8z"/></svg>
+              </button>
+            </th>
+            <th data-sort="status">
+              <span class="th-label">Status</span>
+              <button type="button" class="col-filter-btn" data-col="status" aria-label="Filter Status" title="Filter">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7v6l-4 2v-8z"/></svg>
+              </button>
+            </th>
+            <th data-sort="modified">
+              <span class="th-label">Modified</span>
+              <button type="button" class="col-filter-btn" data-col="modified" aria-label="Filter Modified" title="Filter">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7v6l-4 2v-8z"/></svg>
+              </button>
+            </th>
+            <th data-sort="duration">
+              <span class="th-label">Duration</span>
+              <button type="button" class="col-filter-btn" data-col="duration" aria-label="Filter Duration" title="Filter">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7v6l-4 2v-8z"/></svg>
+              </button>
+            </th>
             <th></th>
           </tr>
         </thead>
@@ -73,6 +97,8 @@
     </div>
     <div id="browse-empty" class="browse-empty" hidden>No tracks match.</div>
   </div>
+
+  <div id="col-filter-popover" class="col-filter-popover" hidden></div>
 
   <main id="review-area">
     <div id="card" class="card">
