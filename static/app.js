@@ -334,6 +334,7 @@ const reviewArea = document.getElementById("review-area");
 const browseArea = document.getElementById("browse-area");
 const browseToggleBtn = document.getElementById("browse-toggle-btn");
 const browseSearch = document.getElementById("browse-search");
+const clearFiltersBtn = document.getElementById("clear-filters-btn");
 const browseTbody = document.getElementById("browse-tbody");
 const colFilterPopover = document.getElementById("col-filter-popover");
 const browseEmpty = document.getElementById("browse-empty");
@@ -791,7 +792,19 @@ function renderBrowseTable() {
   document.querySelectorAll(".col-filter-btn").forEach((btn) => {
     btn.classList.toggle("active", !!columnFilters[btn.dataset.col]);
   });
+
+  const hasActiveFilters = query.length > 0 || Object.keys(columnFilters).some((col) => columnFilters[col]);
+  clearFiltersBtn.hidden = !hasActiveFilters;
 }
+
+function clearAllFilters() {
+  columnFilters = {};
+  browseSearch.value = "";
+  closeColumnFilter();
+  renderBrowseTable();
+}
+
+clearFiltersBtn.addEventListener("click", clearAllFilters);
 
 function showReviewMode() {
   browseArea.hidden = true;
