@@ -77,6 +77,8 @@ function render(track) {
 
   player.pause();
   player.src = `/tracks/${track.id}/audio`;
+  seekTarget = null;
+  clearTimeout(seekCommitTimer);
   playerProgress.style.width = "0%";
   timeCurrent.textContent = "0:00";
   timeDuration.textContent = "0:00";
@@ -136,7 +138,45 @@ player.addEventListener("loadedmetadata", () => {
   timeDuration.textContent = formatTime(player.duration);
 });
 
+// Seeking is a two-layer scheme: seekTarget/displaySeekTime track where the
+// user WANTS to be, updated instantly on every press or drag tick so the UI
+// never feels laggy. The actual player.currentTime assignment — a real seek,
+// which the browser has to resolve against the network/decoder — is
+// debounced behind SEEK_COMMIT_DELAY_MS. Firing a real seek on every single
+// keypress/mousemove let a fast burst pile up overlapping in-flight seeks,
+// which could desync the decoder badly enough to drop audio output
+// entirely (silence until a further seek happened to reset it). Coalescing
+// a burst into one committed seek avoids ever putting the decoder in that
+// state, instead of just reacting to it after the fact.
+let seekTarget = null;
+let seekCommitTimer = null;
+const SEEK_COMMIT_DELAY_MS = 150;
+
+function displaySeekTime(seconds) {
+  timeCurrent.textContent = formatTime(seconds);
+  if (player.duration) {
+    playerProgress.style.width = `${(seconds / player.duration) * 100}%`;
+  }
+}
+
+function commitSeek() {
+  seekCommitTimer = null;
+  if (seekTarget !== null) player.currentTime = seekTarget;
+}
+
+function scheduleSeek(target) {
+  seekTarget = target;
+  displaySeekTime(seekTarget);
+  clearTimeout(seekCommitTimer);
+  seekCommitTimer = setTimeout(commitSeek, SEEK_COMMIT_DELAY_MS);
+}
+
+player.addEventListener("seeked", () => {
+  seekTarget = null;
+});
+
 player.addEventListener("timeupdate", () => {
+  if (seekTarget !== null) return; // an unresolved seek is driving the display instead
   timeCurrent.textContent = formatTime(player.currentTime);
   if (player.duration) {
     playerProgress.style.width = `${(player.currentTime / player.duration) * 100}%`;
@@ -147,7 +187,7 @@ function seekToClientX(clientX) {
   if (!player.duration) return;
   const rect = playerBar.getBoundingClientRect();
   const ratio = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1);
-  player.currentTime = ratio * player.duration;
+  scheduleSeek(ratio * player.duration);
 }
 
 let isDraggingBar = false;
@@ -162,14 +202,19 @@ window.addEventListener("mousemove", (event) => {
 });
 
 window.addEventListener("mouseup", () => {
-  isDraggingBar = false;
+  if (isDraggingBar) {
+    isDraggingBar = false;
+    clearTimeout(seekCommitTimer);
+    commitSeek();
+  }
 });
 
 const SEEK_STEP_SEC = 10;
 
 function seekBy(deltaSeconds) {
   if (!player.duration) return;
-  player.currentTime = Math.min(Math.max(player.currentTime + deltaSeconds, 0), player.duration);
+  const base = seekTarget !== null ? seekTarget : player.currentTime;
+  scheduleSeek(Math.min(Math.max(base + deltaSeconds, 0), player.duration));
 }
 
 async function refreshStats() {
