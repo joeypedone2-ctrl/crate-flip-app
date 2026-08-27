@@ -1,6 +1,8 @@
 """SQLite persistence for the local track index."""
 
 import sqlite3
+import time
+import uuid
 from contextlib import contextmanager
 
 SCHEMA = """
@@ -21,9 +23,26 @@ CREATE TABLE IF NOT EXISTS tracks (
     confirmed_energy INTEGER,
     status TEXT NOT NULL DEFAULT 'pending',
     error TEXT,
-    processed_at REAL
+    processed_at REAL,
+    checked_out_at REAL,
+    checkout_batch_id TEXT
 );
 """
+
+# Columns added after the initial release — applied via ALTER TABLE for
+# existing databases (CREATE TABLE IF NOT EXISTS above only covers a fresh
+# one). Each entry is (column_name, column_ddl_type).
+_MIGRATED_COLUMNS = [
+    ("checked_out_at", "REAL"),
+    ("checkout_batch_id", "TEXT"),
+]
+
+
+def _ensure_columns(conn):
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(tracks)").fetchall()}
+    for name, ddl_type in _MIGRATED_COLUMNS:
+        if name not in existing:
+            conn.execute(f"ALTER TABLE tracks ADD COLUMN {name} {ddl_type}")
 
 
 @contextmanager
@@ -32,6 +51,7 @@ def connect(db_path):
     conn.row_factory = sqlite3.Row
     try:
         conn.execute(SCHEMA)
+        _ensure_columns(conn)
         conn.commit()
         yield conn
     finally:
@@ -107,8 +127,15 @@ def get_track(conn, track_id):
 
 
 def get_next_pending(conn, after_id=0):
+    # checked_out_at IS NULL excludes tracks currently out on a mobile batch —
+    # otherwise the desktop queue and a phone session could hand out the same
+    # track to review twice.
     return conn.execute(
-        "SELECT * FROM tracks WHERE status = 'pending' AND error IS NULL AND id > ? ORDER BY id LIMIT 1",
+        """
+        SELECT * FROM tracks
+        WHERE status = 'pending' AND error IS NULL AND checked_out_at IS NULL AND id > ?
+        ORDER BY id LIMIT 1
+        """,
         (after_id,),
     ).fetchone()
 
@@ -146,6 +173,62 @@ def delete_tracks_under_folder(conn, folder):
 
 def get_all_tracks(conn):
     return conn.execute("SELECT * FROM tracks ORDER BY id").fetchall()
+
+
+def sweep_expired_checkouts(conn, expiry_sec):
+    # A phone batch that's checked out but never synced back (app deleted,
+    # phone lost, session abandoned) would otherwise lock those tracks out of
+    # the desktop queue forever. Run this before every checkout so orphans
+    # get reclaimed automatically instead of needing manual cleanup.
+    cutoff = time.time() - expiry_sec
+    conn.execute(
+        """
+        UPDATE tracks SET checked_out_at = NULL, checkout_batch_id = NULL
+        WHERE checked_out_at IS NOT NULL AND checked_out_at < ?
+        """,
+        (cutoff,),
+    )
+    conn.commit()
+
+
+def checkout_batch(conn, size):
+    candidate_ids = [
+        row["id"]
+        for row in conn.execute(
+            """
+            SELECT id FROM tracks
+            WHERE status = 'pending' AND error IS NULL AND checked_out_at IS NULL
+            ORDER BY id LIMIT ?
+            """,
+            (size,),
+        ).fetchall()
+    ]
+    if not candidate_ids:
+        return None, []
+
+    batch_id = uuid.uuid4().hex
+    now = time.time()
+    placeholders = ",".join("?" for _ in candidate_ids)
+    conn.execute(
+        f"UPDATE tracks SET checked_out_at = ?, checkout_batch_id = ? WHERE id IN ({placeholders})",
+        (now, batch_id, *candidate_ids),
+    )
+    conn.commit()
+    return batch_id, get_batch_tracks(conn, batch_id)
+
+
+def get_batch_tracks(conn, batch_id):
+    return conn.execute(
+        "SELECT * FROM tracks WHERE checkout_batch_id = ? ORDER BY id", (batch_id,)
+    ).fetchall()
+
+
+def release_checkout(conn, track_id):
+    conn.execute(
+        "UPDATE tracks SET checked_out_at = NULL, checkout_batch_id = NULL WHERE id = ?",
+        (track_id,),
+    )
+    conn.commit()
 
 
 def get_stats(conn):

@@ -3,8 +3,9 @@ import subprocess
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -17,6 +18,18 @@ from analysis import ANALYSIS_OFFSET_SEC
 DB_PATH = "crate_flip.db"
 STATIC_DIR = Path(__file__).parent / "static"
 AUDIO_CACHE_DIR = Path(__file__).parent / ".cache" / "audio"
+
+# Mobile (phone) preview clips live in a separate cache from the desktop
+# preview above: short and low-bitrate by design (see _mobile_preview_path),
+# since these are meant to be downloaded in a batch and held on a phone,
+# not streamed once from a machine on the same LAN.
+MOBILE_CACHE_DIR = Path(__file__).parent / ".cache" / "mobile"
+MOBILE_CLIP_SEC = 45
+MOBILE_CLIP_BITRATE = "128k"
+# How long a checked-out batch is held before it's considered abandoned
+# (app deleted, phone lost, session never synced) and swept back into the
+# normal pending pool so it doesn't get stuck off the desktop queue forever.
+MOBILE_CHECKOUT_EXPIRY_SEC = 48 * 60 * 60
 
 # Extensions whose containers commonly carry large embedded album art
 # (ID3 APIC / iTunes atoms), which can delay browser metadata probing by
@@ -80,6 +93,45 @@ def _playable_audio_path(track_id, source_path, duration_sec=None):
         return source_path
 
 
+def _mobile_preview_path(track_id, source_path, duration_sec=None):
+    # Unlike the desktop preview (a near-full-length stream copy), this is
+    # deliberately short and re-encoded down — it's meant to be downloaded
+    # in a batch of dozens onto a phone, not streamed once over a LAN. A
+    # 45s/128kbps clip is ~15-20x smaller than the desktop preview while
+    # still being plenty to judge genre/energy on. Unlike
+    # _playable_audio_path, there's no reasonable fallback to the original
+    # file here (it would defeat the entire point of a small batch download),
+    # so a failure here just raises — the caller drops that track from the
+    # batch rather than handing the phone something huge or unplayable.
+    offset = PREVIEW_START_OFFSET_SEC
+    if duration_sec is not None and duration_sec <= offset + 5:
+        offset = 0
+
+    MOBILE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cached_path = MOBILE_CACHE_DIR / f"{track_id}.m4a"
+    if cached_path.exists():
+        return cached_path
+
+    cmd = ["ffmpeg", "-v", "error", "-y"]
+    if offset:
+        cmd += ["-ss", str(offset)]
+    cmd += [
+        "-i", str(source_path),
+        "-t", str(MOBILE_CLIP_SEC),
+        "-map", "0:a",
+        "-c:a", "aac",
+        "-b:a", MOBILE_CLIP_BITRATE,
+        "-ac", "2",
+        str(cached_path),
+    ]
+    subprocess.run(cmd, check=True, capture_output=True)
+    return cached_path
+
+
+def _clear_mobile_preview(track_id):
+    (MOBILE_CACHE_DIR / f"{track_id}.m4a").unlink(missing_ok=True)
+
+
 SCAN_STATE = {
     "running": False,
     "folder": None,
@@ -119,6 +171,17 @@ class RemoveFolderRequest(BaseModel):
 class ConfirmRequest(BaseModel):
     genre: str = Field(min_length=1)
     energy: int = Field(ge=1, le=5)
+
+
+class MobileSyncDecision(BaseModel):
+    track_id: int
+    action: Literal["confirm", "delete", "skip"]
+    genre: Optional[str] = None
+    energy: Optional[int] = Field(default=None, ge=1, le=5)
+
+
+class MobileSyncRequest(BaseModel):
+    decisions: list[MobileSyncDecision]
 
 
 def _track_to_dict(row):
@@ -253,3 +316,123 @@ def delete_track(track_id: int):
         db.mark_deleted(conn, track_id)
         updated = db.get_track(conn, track_id)
     return _track_to_dict(updated)
+
+
+# --- Mobile (phone) batch checkout/sync -------------------------------
+#
+# A phone reviews tracks offline in small batches rather than talking to
+# this server per-swipe: check out a batch (which also generates each
+# track's small mobile preview clip), download it, swipe through it with
+# no network needed, then sync the accumulated decisions back in one
+# request. Checked-out tracks are hidden from the desktop queue
+# (db.get_next_pending) so the same track never gets reviewed twice from
+# two devices at once.
+#
+# NOTE before exposing this beyond localhost/LAN (e.g. via Tailscale): these
+# routes have no auth yet, same as the rest of this app today. That's an
+# acceptable posture for "only my own devices can reach my laptop at all,"
+# but worth revisiting — these endpoints can delete files — before relying
+# on it from anywhere less trusted than that.
+
+
+@app.post("/mobile/batch/checkout")
+def mobile_checkout(size: int = Query(default=25, ge=1, le=100)):
+    with db.connect(DB_PATH) as conn:
+        db.sweep_expired_checkouts(conn, MOBILE_CHECKOUT_EXPIRY_SEC)
+        batch_id, rows = db.checkout_batch(conn, size)
+        if batch_id is None:
+            raise HTTPException(status_code=404, detail="No pending tracks available to check out")
+
+        tracks = []
+        for row in rows:
+            path = Path(row["path"])
+            try:
+                if not path.is_file():
+                    raise FileNotFoundError(path)
+                _mobile_preview_path(row["id"], path, row["file_duration_sec"])
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                # Couldn't build a preview for this one (missing file, ffmpeg
+                # failure) — release it back to the pool rather than hand the
+                # phone a track it can't play.
+                db.release_checkout(conn, row["id"])
+                continue
+            tracks.append(
+                {
+                    "id": row["id"],
+                    "filename": path.name,
+                    "predicted_genre": row["predicted_genre"],
+                    "predicted_energy": row["predicted_energy"],
+                    "confirmed_genre": row["confirmed_genre"],
+                    "confirmed_energy": row["confirmed_energy"],
+                    "preview_url": f"/mobile/preview/{row['id']}",
+                }
+            )
+
+    return {"batch_id": batch_id, "tracks": tracks}
+
+
+@app.get("/mobile/preview/{track_id}")
+def mobile_preview(track_id: int):
+    cached_path = MOBILE_CACHE_DIR / f"{track_id}.m4a"
+    if not cached_path.is_file():
+        raise HTTPException(status_code=404, detail="No mobile preview for this track")
+    return FileResponse(cached_path)
+
+
+@app.post("/mobile/batch/{batch_id}/sync")
+def mobile_sync(batch_id: str, body: MobileSyncRequest):
+    summary = {"confirmed": 0, "deleted": 0, "skipped": 0, "errors": []}
+
+    with db.connect(DB_PATH) as conn:
+        batch_rows = {row["id"]: row for row in db.get_batch_tracks(conn, batch_id)}
+        if not batch_rows:
+            raise HTTPException(status_code=404, detail="Unknown or already-synced batch")
+
+        decided_ids = set()
+        for decision in body.decisions:
+            row = batch_rows.get(decision.track_id)
+            if row is None:
+                summary["errors"].append(
+                    {"track_id": decision.track_id, "detail": "not part of this batch"}
+                )
+                continue
+            decided_ids.add(decision.track_id)
+
+            if decision.action == "confirm":
+                if not decision.genre or decision.energy is None:
+                    summary["errors"].append(
+                        {"track_id": decision.track_id, "detail": "confirm requires genre and energy"}
+                    )
+                    db.release_checkout(conn, decision.track_id)
+                    continue
+                db.confirm_track(conn, decision.track_id, decision.genre, decision.energy)
+                summary["confirmed"] += 1
+            elif decision.action == "delete":
+                path = Path(row["path"])
+                if path.is_file():
+                    try:
+                        send2trash(str(path))
+                    except Exception as exc:
+                        summary["errors"].append(
+                            {"track_id": decision.track_id, "detail": f"trash failed: {exc}"}
+                        )
+                        db.release_checkout(conn, decision.track_id)
+                        continue
+                db.mark_deleted(conn, decision.track_id)
+                summary["deleted"] += 1
+            else:  # skip — leave it pending, just release the checkout
+                summary["skipped"] += 1
+
+            db.release_checkout(conn, decision.track_id)
+
+        # Anything checked out in this batch but never mentioned in the
+        # sync payload (e.g. the phone session ended early) goes back to
+        # pending rather than staying stuck checked out until it expires.
+        for track_id in batch_rows.keys() - decided_ids:
+            db.release_checkout(conn, track_id)
+            summary["skipped"] += 1
+
+    for track_id in batch_rows:
+        _clear_mobile_preview(track_id)
+
+    return summary
