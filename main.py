@@ -195,6 +195,11 @@ def index():
     return (STATIC_DIR / "index.html").read_text()
 
 
+@app.get("/mobile", response_class=HTMLResponse)
+def mobile_index():
+    return (STATIC_DIR / "mobile.html").read_text()
+
+
 @app.get("/api/health")
 def health():
     return {"message": "Crate Flip is alive"}

@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Crate Flip · Mobile</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/mobile.css" />
+</head>
+<body class="m-body">
+  <header class="m-header">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <defs>
+          <clipPath id="logo-record-clip">
+            <rect x="0" y="12" width="24" height="12"/>
+          </clipPath>
+        </defs>
+        <g clip-path="url(#logo-record-clip)">
+          <circle cx="12" cy="14" r="5"/>
+          <circle cx="12" cy="14" r="1.8"/>
+          <circle cx="12" cy="14" r="0.4" fill="currentColor" stroke="none"/>
+        </g>
+        <rect x="5" y="2" width="14" height="10" rx="1"/>
+        <path d="M5 4.5h14"/>
+        <path d="M8 4.5v5.1"/>
+        <path d="M16 4.5v5.1"/>
+        <path d="M9.3 6h5.4"/>
+        <path d="M9.3 7.6h5.4"/>
+        <path d="M9.3 9.2h5.4"/>
+        <rect x="9.4" y="10" width="5.2" height="1.1" rx="0.55"/>
+      </svg>
+      <h1>Crate Flip</h1>
+    </div>
+    <div id="m-batch-info" class="m-batch-info"></div>
+  </header>
+
+  <main id="m-main">
+    <section id="m-start" class="m-panel">
+      <p class="m-lede">Check out a batch of pending tracks to review offline-first, then sync your decisions back whenever you're ready.</p>
+      <label class="m-field-label" for="m-batch-size">Batch size</label>
+      <input id="m-batch-size" type="number" min="1" max="100" value="20" />
+      <button id="m-checkout-btn" class="m-primary-btn">Get a batch</button>
+      <p id="m-start-status" class="m-status"></p>
+    </section>
+
+    <section id="m-swipe-area" class="m-panel" hidden>
+      <div id="m-card" class="m-card">
+        <div id="m-filename" class="m-filename"></div>
+
+        <div class="m-player">
+          <button id="m-play-btn" class="m-play-btn" aria-label="Play/Pause">
+            <svg id="m-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            <svg id="m-pause-icon" class="m-icon-hidden" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+          </button>
+          <div class="m-player-track">
+            <div class="m-player-bar" id="m-player-bar">
+              <div class="m-player-progress" id="m-player-progress"></div>
+            </div>
+            <div class="m-player-time">
+              <span id="m-time-current">0:00</span>
+              <span id="m-time-duration">0:00</span>
+            </div>
+          </div>
+        </div>
+        <audio id="m-player" preload="metadata"></audio>
+
+        <div class="m-field">
+          <label for="m-genre-input">Genre</label>
+          <input id="m-genre-input" list="m-genre-options" autocomplete="off" />
+          <datalist id="m-genre-options">
+            <option value="house"></option>
+            <option value="tech house"></option>
+            <option value="deep house"></option>
+            <option value="techno"></option>
+            <option value="melodic techno"></option>
+            <option value="hard techno"></option>
+            <option value="trance"></option>
+            <option value="progressive trance"></option>
+            <option value="dubstep"></option>
+            <option value="drum and bass"></option>
+            <option value="garage"></option>
+            <option value="breaks"></option>
+            <option value="minimal"></option>
+          </datalist>
+        </div>
+
+        <div class="m-field">
+          <label>Energy</label>
+          <div class="m-star-rating" id="m-energy-stars" role="radiogroup" aria-label="Energy rating">
+            <button type="button" class="m-star" data-value="1" aria-label="1 star"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.9 7.1.6-5.5 4.8 1.7 7.1L12 17.3 5.8 21.4l1.7-7.1L2 9.5l7.1-.6z"/></svg></button>
+            <button type="button" class="m-star" data-value="2" aria-label="2 stars"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.9 7.1.6-5.5 4.8 1.7 7.1L12 17.3 5.8 21.4l1.7-7.1L2 9.5l7.1-.6z"/></svg></button>
+            <button type="button" class="m-star" data-value="3" aria-label="3 stars"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.9 7.1.6-5.5 4.8 1.7 7.1L12 17.3 5.8 21.4l1.7-7.1L2 9.5l7.1-.6z"/></svg></button>
+            <button type="button" class="m-star" data-value="4" aria-label="4 stars"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.9 7.1.6-5.5 4.8 1.7 7.1L12 17.3 5.8 21.4l1.7-7.1L2 9.5l7.1-.6z"/></svg></button>
+            <button type="button" class="m-star" data-value="5" aria-label="5 stars"><svg viewBox="0 0 24 24"><path d="M12 2l2.9 6.9 7.1.6-5.5 4.8 1.7 7.1L12 17.3 5.8 21.4l1.7-7.1L2 9.5l7.1-.6z"/></svg></button>
+          </div>
+        </div>
+
+        <div class="m-swipe-hint" id="m-swipe-hint"></div>
+      </div>
+
+      <div class="m-controls">
+        <button id="m-delete-btn" class="m-icon-btn m-icon-btn-delete" aria-label="Delete">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/>
+            <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/>
+            <path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/>
+          </svg>
+        </button>
+        <button id="m-skip-btn" class="m-icon-btn m-icon-btn-skip" aria-label="Skip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 5v14"/><path d="M18 13l-6 6-6-6"/>
+          </svg>
+        </button>
+        <button id="m-confirm-btn" class="m-icon-btn m-icon-btn-confirm" aria-label="Confirm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 13l4 4L19 7"/>
+          </svg>
+        </button>
+      </div>
+      <p class="m-hint">Swipe right to confirm · left to delete · up to skip — or use the buttons</p>
+    </section>
+
+    <section id="m-done" class="m-panel" hidden>
+      <p class="m-lede"><span id="m-pending-count">0</span> decision(s) ready to sync back to your library.</p>
+      <button id="m-sync-btn" class="m-primary-btn">Sync now</button>
+      <button id="m-more-btn" class="m-secondary-btn">Get another batch</button>
+      <p id="m-sync-status" class="m-status"></p>
+    </section>
+  </main>
+
+  <script src="/static/mobile.js"></script>
+</body>
+</html>
